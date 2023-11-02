@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ObjectDetection</title>
+</head>
+<body>
+    <h1>Object Detection with Yolo8</h1>
+    <img src="/video_feed" width="640" height="480">
+    <br>
+    <br>
+    <div>
+       <label for="trmon" style="margin-top:-20px;margin-left:40px">Off</label>
+       <input type="radio" id="Off" name="drvmon" >        
+       <label for="trmon" style="margin-top:-20px;margin-left:40px">Image</label>
+       <input type="radio" id="Image" name="drvmon" >
+       <label for="trmon" style="margin-top:-20px;margin-left:40px">Video</label>
+       <input type="radio" id="Video" name="drvmon" >
+       <label for="trmon" style="margin-top:-20px;margin-left:40px">Camera</label>
+       <input type="radio" id="Camera" name="drvmon" >
+    </div><!-- XXX -->
+    <br>
+    <br>
+<textarea cols="87" rows="6"> 
+   Dieses Eingabefeld hat eine Breite von 24 Zeichen 
+   und ist vier Zeilen hoch.
+</textarea>
+    <br>
+    <br>
+    <form method="POST" action="/Run">
+        <button type="submit">Run</button>
+    </form>
+</body>
+</html>
+
