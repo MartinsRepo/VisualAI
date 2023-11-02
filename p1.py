@@ -396,7 +396,7 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 		#ycenter = (maxXY[1] + minXY[1]) / 2
 		xcenter = int(image_points[0][0])
 		ycenter = int(image_points[0][1])
-		print(xcenter,ycenter )
+		#print(xcenter,ycenter )
 		# faceID, distance, maxXY, minXY
 		dist.append((0, (int(((xcenter-width/2)**2+(ycenter-height/2)**2)**.4)), maxXY, minXY)) 
 		#print(image_points)
@@ -452,15 +452,37 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 			
 		# face position up-straight-down
 		facedir_vert = 99
-		if is_between(-0.6, rotation_vector[1], 0.2) and is_between(-0.6, rotation_vector[2], 0.2):
-			facedir_vert = 0  # straight
+		if facedir_horiz == -1:
+			if int(noseDirAng[0])<0 and rotation_vector[1]>3 and is_between(-0.6, rotation_vector[2], 0.6):
+				facedir_vert = 0  # straight
+			if int(noseDirAng[0])>0 and is_between(-3, rotation_vector[1], 0) and is_between(-0.6, rotation_vector[2], 0.6):
+				facedir_vert = 0  # left			
+		elif facedir_horiz==0:
+			if int(noseDirAng[0])<0 and is_between(-0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
+				facedir_vert = 0  # straight
+			elif int(noseDirAng[0])>0 and is_between(-0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
+				facedir_vert = 1  # up
+			elif int(noseDirAng[0])<0 and is_between(-3, rotation_vector[1], 0) and is_between(0, rotation_vector[2], 1.5):
+				facedir_vert = -1  # down
+			print('#',facedir_vert,int(noseDirAng[0]),is_between(-3, rotation_vector[1], 0), is_between(0, rotation_vector[2], 1.5))
+		elif facedir_horiz==1:
+			if int(noseDirAng[0])<0 and is_between(-0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
+				facedir_vert = 0  # straight
+			if int(noseDirAng[0])<0 and is_between(0.61, rotation_vector[1], 3) and is_between(-0.6, rotation_vector[2], 0.6):
+				facedir_vert = 0  # right
+		
+		
+		#if int(noseDirAng[0])<0 and is_between(-0.6, rotation_vector[1], 0.2) and is_between(-0.6, rotation_vector[2], 0.5):
+		#	facedir_vert = 0  # straight
 		#elif is_between(-0.03, rotation_vector[1], -0.08) and rotation_vector[2] > -0.6 :
+		#elif is_between(45, int(noseDirAng[0]), 135):
+		#elif noseDirAng[0]>0:
 		#	facedir_vert = 1 # up
-		#elif  rotation_vector[1] < -2 and is_between(0, rotation_vector[2], 1.5):
-	#		facedir_vert = -1 #down
-		print('v',facedir_vert) 
+		#elif  rotation_vector[1] < -2 and is_between(0.21, rotation_vector[2], 1.5):
+		#	facedir_vert = -1 #down
+		#print('v',facedir_vert) 
 			
-		# Calculate eye distances
+		# Calculate eye vertikal distances
 		rdelta = rmark[3] - rmark[2]
 		ldelta = lmark[3] - lmark[2]
 		drowsy = False
@@ -470,29 +492,29 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 		if drowsy:
 			if facedir_horiz==0:
 				if facedir_vert == 0:
-					scenery = "drowsy and looking straigt forward"
+					scenery = "drowsy, face turned into straight direction, looking forward"
 				elif facedir_vert == -1:
-					scenery = "drowsy and looking down"
+					scenery = "drowsy, face turned into straight direction, looking downward"
 				elif facedir_vert == 1:
-					scenery = "drowsy and looking up"
+					scenery = "drowsy, face turned into straight direction, looking upward"
 				elif facedir_vert == 99:
 					scenery = "drowsy and looking in straight direction, vertical pose not detectable"
 			elif facedir_horiz==-1:
 				if facedir_vert == 0:
-					scenery = "drowsy and looking in left direction, straight"
+					scenery = "drowsy, face turned into left direction, looking forward"
 				elif facedir_vert == -1:
-					scenery = "drowsy and looking in left direction, down"
+					scenery = "drowsy, face turned into left direction, looking downward"
 				elif facedir_vert == 1:
-					scenery = "drowsy and looking in left direction, up"
+					scenery = "drowsy, face turned into left direction, looking upward"
 				elif facedir_vert == 99:
-					scenery = "drowsy and looking in left direction, vertical pose not detectable"
+					scenery = "drowsy, face turned into left direction, vertical pose not detectable"
 			elif facedir_horiz==1:
 				if facedir_vert == 0:
-					scenery = "drowsy and looking in right direction, straight"
+					scenery = "drowsy, face turned into right direction, looking forward"
 				elif facedir_vert == -1:
-					scenery = "drowsy and looking in right direction, down"
+					scenery = "drowsy, face turned into right direction, looking downward"
 				elif facedir_vert == 1:
-					scenery = "drowsy and looking in right direction, up"
+					scenery = "drowsy, face turned into right direction, looking upward"
 				elif facedir_vert == 99:
 					scenery = "drowsy and looking in right direction, vertical pose not detectable"
 			elif facedir_horiz==99:
@@ -500,31 +522,31 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 		else:
 			if facedir_horiz==0:
 				if facedir_vert == 0:
-					scenery = "awake and looking straigt forward"
+					scenery = "awake, face turned into straight direction, looking forward"
 				elif facedir_vert == -1:
-					scenery = "awake and looking down"
+					scenery = "awake, face turned into straight direction, looking downward"
 				elif facedir_vert == 1:
-					scenery = "awake and looking up"
+					scenery = "awake, face turned into straight direction, looking upward"
 				elif facedir_vert == 99:
-					scenery = "awake and looking in straight direction, vertical pose not detectable"
+					scenery = "awake, face turned into straight direction, vertical pose not detectable"
 			elif facedir_horiz==-1:
 				if facedir_vert == 0:
-					scenery = "awake and looking in left direction, straight"
+					scenery = "awake, face turned into left direction, looking forward"
 				elif facedir_vert == -1:
-					scenery = "awake and looking in left direction, down"
+					scenery = "awake, face turned into left direction, looking downward"
 				elif facedir_vert == 1:
-					scenery = "awake and looking in left direction, up"
+					scenery = "awake, face turned into left direction, looking upward"
 				elif facedir_vert == 99:
-					scenery = "awake and looking in left direction, vertical pose not detectable"
+					scenery = "awake, face turned into left direction, vertical pose not detectable"
 			elif facedir_horiz==1:
 				if facedir_vert == 0:
-					scenery = "awake and looking in right direction, straight"
+					scenery = "awake, face turned into right direction, looking forward"
 				elif facedir_vert == -1:
-					scenery = "awake and looking in right direction, down"
+					scenery = "awake, face turned into right direction, looking downward"
 				elif facedir_vert == 1:
-					scenery = "awake and looking in right direction, up"
+					scenery = "awake, face turned into right direction, looking upward"
 				elif facedir_vert == 99:
-					scenery = "awake and looking in right direction, vertical pose not detectable"
+					scenery = "awake, face turned into right direction, vertical pose not detectable"
 			elif facedir_horiz==99:
 				scenery = "awake and direction not detectable"
 
