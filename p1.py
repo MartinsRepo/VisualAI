@@ -29,6 +29,7 @@ from queue_manager import queueScenery
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 mp_face_mesh = mp.solutions.face_mesh
+mp_hands = mp.solutions.hands
 #drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
 
 # 3D model points.
@@ -295,6 +296,25 @@ def draw_nose_direction(image, nose_direction, center_x, center_y):
 	cv2.line(image, (int(center_x), int(center_y)), (end_x, end_y), line_color, 2)
 
 
+def detect_hands(image):
+	
+	mp_hands = mp.solutions.hands
+	hands = mp_hands.Hands(
+		static_image_mode=True,
+		max_num_hands=2,
+		min_detection_confidence=0.5,
+		min_tracking_confidence=0.5
+	)
+	
+	image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+	
+	results = hands.process(image)
+	
+	if results.multi_hand_landmarks:
+		return results.multi_hand_landmarks
+	else:
+		return None
+
     
     
 def debugFaceConsolePrint(lme,rme,pts,lmark,dlmark,rmark,drmark,lmouthmatched,rmouthmatched):
@@ -316,7 +336,7 @@ def debugFaceConsolePrint(lme,rme,pts,lmark,dlmark,rmark,drmark,lmouthmatched,rm
 	    print("Right Mouth Endpoint is outside the face oval.")
 
 		
-def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind):
+def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter, imageind):
 
 	scenery = "Not Found"
 	
@@ -324,24 +344,17 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 	size = image.shape
 	annotated_image = image.copy()
 	
-
-	#Debug writing
-	#printlandmarks(results.multi_face_landmarks)
-	
 	if results.multi_face_landmarks:
 		dist=[]
 	
 		landmarks = results.multi_face_landmarks[0] #only one face
-		#print('###',landmarks)
-		
-		#mp_drawing.draw_landmarks(annotated_image, landmarks, landmark_drawing_spec=drawing_spec) # draw every match
 		
 		faceXY = []
 		ih, iw, _ = annotated_image.shape
 		for id,lm in enumerate(landmarks.landmark):                           # loop over all land marks of one face
 			x,y = int(lm.x*iw), int(lm.y*ih)
 			# print(lm)
-			faceXY.append((x, y))                                           # put all xy points in neat array
+			faceXY.append((x, y))                                         # put all xy points in neat array
 
 		image_points = np.array([
 			faceXY[19],     # "nose"
@@ -354,9 +367,7 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 		
 		for i in image_points:
 			cv2.circle(annotated_image,(int(i[0]),int(i[1])),4,(255,0,0),-1)
-			
-		
-#############################################
+
 
 		right_coords = [landmarks.landmark[p] for p in RIGHT_EYE]
 		left_coords = [landmarks.landmark[p] for p in LEFT_EYE]
@@ -378,28 +389,14 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 		lpoint_inside_oval = cv2.pointPolygonTest(pts, (image_points[4][0], image_points[4][1]), False)
 		rpoint_inside_oval = cv2.pointPolygonTest(pts, (image_points[5][0], image_points[5][1]), False)
 		
-		#nose_direction, cx, cy = calculate_nose_direction(landmarks.landmark,image_points[0])
-		#print("Nose Direction (Degrees):")
-		#print("Up:", nose_direction["up"])
-		#print("Down:", nose_direction["down"])
-		#print("Left:", nose_direction["left"])
-		#print("Right:", nose_direction["right"])
-		# draw vector head position
-		#draw_nose_direction(annotated_image, nose_direction["up"], cx, cy)
-		#cv2.line(annotated_image, p1, p2, (255, 0, 0), 2)
-		
 		#calculating nose direction vector
 		maxXY = max(faceXY, key=x_element)[0], max(faceXY, key=y_element)[1]
 		minXY = min(faceXY, key=x_element)[0], min(faceXY, key=y_element)[1]
 
-		#xcenter = (maxXY[0] + minXY[0]) / 2
-		#ycenter = (maxXY[1] + minXY[1]) / 2
 		xcenter = int(image_points[0][0])
 		ycenter = int(image_points[0][1])
-		#print(xcenter,ycenter )
-		# faceID, distance, maxXY, minXY
+
 		dist.append((0, (int(((xcenter-width/2)**2+(ycenter-height/2)**2)**.4)), maxXY, minXY)) 
-		#print(image_points)
 		
 		dist_coeffs = np.zeros((4, 1))  # Assuming no lens distortion
 		focal_length = size[1]
@@ -420,10 +417,20 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 		cv2.line(annotated_image, p1, p2, (255, 0, 0), 2)
 		
 		noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
-
-		print("Azimuth Angle in degrees:", noseDirAng)
-		print(success, rotation_vector, translation_vector)
-		print(nose_end_point2D, jacobian)
+		
+		# calculate and drwa hand positions
+		
+		hand_landmarks = detect_hands(annotated_image)
+		
+		if hand_landmarks is not None:
+			for hand_landmark in hand_landmarks:
+				mp_drawing.draw_landmarks(annotated_image, hand_landmark, mp_hands.HAND_CONNECTIONS)
+			
+		
+		
+		#print("Azimuth Angle in degrees:", noseDirAng)
+		#print(success, rotation_vector, translation_vector)
+		#print(nose_end_point2D, jacobian)
 		
 		
 		# Create scenery marker
@@ -447,8 +454,8 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 			facedir_horiz = -1 # left
 		elif not lme and rme:
 			facedir_horiz = 1  # right
-		print('h',facedir_horiz) 
-		print(rotation_vector[1],rotation_vector[2])
+		#print('h',facedir_horiz) 
+		#print(rotation_vector[1],rotation_vector[2])
 			
 		# face position up-straight-down
 		facedir_vert = 99
@@ -470,18 +477,8 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 				facedir_vert = 0  # straight
 			if int(noseDirAng[0])<0 and is_between(0.61, rotation_vector[1], 3) and is_between(-0.6, rotation_vector[2], 0.6):
 				facedir_vert = 0  # right
+	
 		
-		
-		#if int(noseDirAng[0])<0 and is_between(-0.6, rotation_vector[1], 0.2) and is_between(-0.6, rotation_vector[2], 0.5):
-		#	facedir_vert = 0  # straight
-		#elif is_between(-0.03, rotation_vector[1], -0.08) and rotation_vector[2] > -0.6 :
-		#elif is_between(45, int(noseDirAng[0]), 135):
-		#elif noseDirAng[0]>0:
-		#	facedir_vert = 1 # up
-		#elif  rotation_vector[1] < -2 and is_between(0.21, rotation_vector[2], 1.5):
-		#	facedir_vert = -1 #down
-		#print('v',facedir_vert) 
-			
 		# Calculate eye vertikal distances
 		rdelta = rmark[3] - rmark[2]
 		ldelta = lmark[3] - lmark[2]
@@ -551,20 +548,6 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 				scenery = "awake and direction not detectable"
 
 
-		#debud print - uncomment
-		#debugFaceConsolePrint(image_points[4],image_points[5],pts,lmark,ldelta,rmark,rdelta,
-		#	lpoint_inside_oval,rpoint_inside_oval)
-		
-		#if pose == -1:
-		#	draw_nose_direction(annotated_image, nose_direction["left"], cx, cy)
-		#	print('#')
-		#elif pose == 0:
-	#		draw_nose_direction(annotated_image, nose_direction["right"], cx, cy)
-	#		print('##')
-	#	elif pose == 1:
-	#		draw_nose_direction(annotated_image, nose_direction["right"], cx, cy)	
-	#		print('###')
-				
 		mp_drawing.draw_landmarks(
 			image=annotated_image,
 			landmark_list=landmarks,
@@ -576,15 +559,6 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 
 
 
-
-
-
-#############################################
-
-		
-
-		
-			
 		dist.sort(key=y_element)
 		# print(dist)
 		
@@ -629,9 +603,6 @@ def mediapipeprocess():
 	thresholds = [drowsiness_threshold, awake_threshold, distraction_threshold, mar_threshold]
 	fname=""
 	
-	
-	
-	
 	while True:
 		if checkConfigQueue():
 			config = getQueuingConfig()
@@ -670,12 +641,16 @@ def mediapipeprocess():
 					
 					# Convert the BGR image to RGB before processing.
 					results = face_mesh.process(cv2.cvtColor(resized_image, cv2.COLOR_BGR2RGB))
-
+					
+					# hand pose detection
+					mp_hands = mp.solutions.hands
+					
 					# calculate face mesh landmarks on the image
 					if not results.multi_face_landmarks:
 						continue
 					
-					result = decode_mediapipe(resized_image, results, thresholds, consecframes, counter, True)
+					result = decode_mediapipe(resized_image, results, mp_hands, thresholds, consecframes, counter, True)
+				
 				print(result["scenery"])
 				# Send scenery to Flask server via a queue 
 				putScenery(result["scenery"])	
