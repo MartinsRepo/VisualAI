@@ -172,14 +172,13 @@ def printlandmarks(results):
 
 # Returns angle in radians
 def calculate_spatial_angles(p1, p2, image_points, nose_end_point2D):
-	tmp1=np.array([p1], dtype=object)
-	tmp2=np.array([p2], dtype=object)
-	vector = np.concatenate((tmp1, tmp2))
 
-	delta_x = image_points[0][0] - nose_end_point2D[0][0][0]
-	delta_y = image_points[0][1] - nose_end_point2D[0][0][1]
+	#delta_x = abs(p1[0] - p2[0])
+	#delta_y = abs(p1[1] - p2[1])
+	delta_x = p2[0] - p1[0]
+	delta_y = p2[1] - p1[1]
 
-	azimuth_radians = math.atan2(delta_y, delta_x)
+	azimuth_radians = math.atan2(delta_x, delta_y)
 	azimuth_degrees = math.degrees(azimuth_radians)
 	
 	return azimuth_degrees, azimuth_radians
@@ -437,9 +436,9 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 		else:
 		    print("Not enough hand landmarks are beneath the crossline.")
 					
-		#print("Azimuth Angle in degrees:", noseDirAng)
-		#print(success, rotation_vector, translation_vector)
-		#print(nose_end_point2D, jacobian)
+		print("Azimuth Angle in degrees:", noseDirAng)
+		print(success, rotation_vector, translation_vector)
+		print(nose_end_point2D, jacobian)
 		
 		
 		# Create scenery marker
@@ -463,7 +462,8 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 			facedir_horiz = -1 # left
 		elif not lme and rme:
 			facedir_horiz = 1  # right
-
+		print('h',facedir_horiz )
+		
 			
 		# face position up-straight-down
 		facedir_vert = 99
@@ -473,11 +473,11 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 			if int(noseDirAng[0])>0 and is_between(-3, rotation_vector[1], 0) and is_between(-0.6, rotation_vector[2], 0.6):
 				facedir_vert = 0  # left			
 		elif facedir_horiz==0:
-			if int(noseDirAng[0])<0 and is_between(-0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
+			if int(noseDirAng[0])<0 and is_between(0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
 				facedir_vert = 0  # straight
 			elif int(noseDirAng[0])>0 and is_between(-0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
 				facedir_vert = 1  # up
-			elif int(noseDirAng[0])<0 and is_between(-3, rotation_vector[1], 0) and is_between(0, rotation_vector[2], 1.5):
+			elif int(noseDirAng[0])<0 and is_between(-4, rotation_vector[1], 0) and is_between(0, rotation_vector[2], 1.5):
 				facedir_vert = -1  # down
 			print('#',facedir_vert,int(noseDirAng[0]),is_between(-3, rotation_vector[1], 0), is_between(0, rotation_vector[2], 1.5))
 		elif facedir_horiz==1:
@@ -486,6 +486,7 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 			if int(noseDirAng[0])<0 and is_between(0.61, rotation_vector[1], 3) and is_between(-0.6, rotation_vector[2], 0.6):
 				facedir_vert = 0  # right
 		
+		print('h',facedir_vert )
 		
 		# Calculate eye vertikal distances
 		rdelta = rmark[3] - rmark[2]
