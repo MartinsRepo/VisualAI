@@ -257,8 +257,6 @@ def calculate_nose_direction(landmarks,nose):
 	nose_points = [landmarks[i] for i in nose_landmark_ids]
 
 	# Calculate the center of the nose based on selected landmarks
-	#center_x = sum(p.x for p in nose_points) / len(nose_points)
-	#center_y = sum(p.y for p in nose_points) / len(nose_points)
 	center_x = nose[0]
 	center_y = nose[1]
 	print(center_x,center_y)
@@ -270,17 +268,6 @@ def calculate_nose_direction(landmarks,nose):
 	"left": math.degrees(math.atan2(nose_points[4].y - center_y, nose_points[4].x - center_x)),
 	"right": math.degrees(math.atan2(center_y - nose_points[4].y, center_x - nose_points[4].x)),
 	}
-	#print(angles)
-	
-
-	
-	
-	#angles = {
-	#"up": math.degrees(math.atan2(nose_points[0].y - center_y, nose_points[0].x - center_x)),
-	#"down": math.degrees(math.atan2(center_y - nose_points[0].y, center_x - nose_points[0].x)),
-	#"left": math.degrees(math.atan2(nose_points[4].y - center_y, nose_points[4].x - center_x)),
-	#"right": math.degrees(math.atan2(center_y - nose_points[4].y, center_x - nose_points[4].x)),
-	#}
 
 	return angles, center_x, center_y
 
@@ -315,8 +302,25 @@ def detect_hands(image):
 	else:
 		return None
 
-    
-    
+
+def checkDistraction(height, width, hand_landmarks, threshold):
+	if hand_landmarks is None:
+		return False  # No hand landmarks detected, not distracted
+		
+	bottom_right = (0, height - height // 3)
+	bottom_left = (width, height - height // 3)
+
+	# Create a NumPy array containing the two coordinates of the crossline
+	crossline = np.array([bottom_left, bottom_right], dtype=int)
+
+	landmarks_below_crossline = sum(1 for landmark in hand_landmarks[0].landmark if landmark.y * height > height // 3)
+
+	# Check if the number of landmarks below the crossline exceeds the threshold
+	is_below_crossline = landmarks_below_crossline >= threshold
+
+	return is_below_crossline
+
+
 def debugFaceConsolePrint(lme,rme,pts,lmark,dlmark,rmark,drmark,lmouthmatched,rmouthmatched):
 	print('Left Mouth Egde:',lme)
 	print('Right Mouth Egde:',rme)
@@ -365,9 +369,9 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 			faceXY[287]     # "right mouth"
 		], dtype="double")
 		
+		# plot the key markers of the face
 		for i in image_points:
 			cv2.circle(annotated_image,(int(i[0]),int(i[1])),4,(255,0,0),-1)
-
 
 		right_coords = [landmarks.landmark[p] for p in RIGHT_EYE]
 		left_coords = [landmarks.landmark[p] for p in LEFT_EYE]
@@ -425,9 +429,14 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 		if hand_landmarks is not None:
 			for hand_landmark in hand_landmarks:
 				mp_drawing.draw_landmarks(annotated_image, hand_landmark, mp_hands.HAND_CONNECTIONS)
-			
 		
-		
+		is_below = checkDistraction(height, width, hand_landmarks,15)
+
+		if is_below:
+		    print("Most hand landmarks are beneath the crossline.")
+		else:
+		    print("Not enough hand landmarks are beneath the crossline.")
+					
 		#print("Azimuth Angle in degrees:", noseDirAng)
 		#print(success, rotation_vector, translation_vector)
 		#print(nose_end_point2D, jacobian)
@@ -454,8 +463,7 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 			facedir_horiz = -1 # left
 		elif not lme and rme:
 			facedir_horiz = 1  # right
-		#print('h',facedir_horiz) 
-		#print(rotation_vector[1],rotation_vector[2])
+
 			
 		# face position up-straight-down
 		facedir_vert = 99
@@ -477,13 +485,17 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 				facedir_vert = 0  # straight
 			if int(noseDirAng[0])<0 and is_between(0.61, rotation_vector[1], 3) and is_between(-0.6, rotation_vector[2], 0.6):
 				facedir_vert = 0  # right
-	
+		
 		
 		# Calculate eye vertikal distances
 		rdelta = rmark[3] - rmark[2]
 		ldelta = lmark[3] - lmark[2]
 		drowsy = False
-		if rdelta < 0.03 and ldelta < 0.03:
+		distracted = False
+		
+		if facedir_vert == -1 and is_below:
+			distracted = True
+		elif rdelta < 0.03 and ldelta < 0.03:
 			drowsy = True
 		
 		if drowsy:
@@ -516,6 +528,13 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 					scenery = "drowsy and looking in right direction, vertical pose not detectable"
 			elif facedir_horiz==99:
 				scenery = "drowsy and direction not detectable"
+		elif distracted:
+			if facedir_horiz==0:
+				scenery = "distracted, face turned into straight direction, looking downward"
+			elif facedir_horiz==-1:
+				scenery = "distracted, face turned into left direction, looking downward"
+			elif facedir_horiz==1:
+				scenery = "distracted, face turned into right direction, looking downward"
 		else:
 			if facedir_horiz==0:
 				if facedir_vert == 0:
