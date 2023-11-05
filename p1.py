@@ -29,6 +29,7 @@ from queue_manager import queueScenery
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 mp_face_mesh = mp.solutions.face_mesh
+mp_hands = mp.solutions.hands
 #drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
 
 # 3D model points.
@@ -171,14 +172,13 @@ def printlandmarks(results):
 
 # Returns angle in radians
 def calculate_spatial_angles(p1, p2, image_points, nose_end_point2D):
-	tmp1=np.array([p1], dtype=object)
-	tmp2=np.array([p2], dtype=object)
-	vector = np.concatenate((tmp1, tmp2))
 
-	delta_x = image_points[0][0] - nose_end_point2D[0][0][0]
-	delta_y = image_points[0][1] - nose_end_point2D[0][0][1]
+	#delta_x = abs(p1[0] - p2[0])
+	#delta_y = abs(p1[1] - p2[1])
+	delta_x = p2[0] - p1[0]
+	delta_y = p2[1] - p1[1]
 
-	azimuth_radians = math.atan2(delta_y, delta_x)
+	azimuth_radians = math.atan2(delta_x, delta_y)
 	azimuth_degrees = math.degrees(azimuth_radians)
 	
 	return azimuth_degrees, azimuth_radians
@@ -256,8 +256,6 @@ def calculate_nose_direction(landmarks,nose):
 	nose_points = [landmarks[i] for i in nose_landmark_ids]
 
 	# Calculate the center of the nose based on selected landmarks
-	#center_x = sum(p.x for p in nose_points) / len(nose_points)
-	#center_y = sum(p.y for p in nose_points) / len(nose_points)
 	center_x = nose[0]
 	center_y = nose[1]
 	print(center_x,center_y)
@@ -269,17 +267,6 @@ def calculate_nose_direction(landmarks,nose):
 	"left": math.degrees(math.atan2(nose_points[4].y - center_y, nose_points[4].x - center_x)),
 	"right": math.degrees(math.atan2(center_y - nose_points[4].y, center_x - nose_points[4].x)),
 	}
-	#print(angles)
-	
-
-	
-	
-	#angles = {
-	#"up": math.degrees(math.atan2(nose_points[0].y - center_y, nose_points[0].x - center_x)),
-	#"down": math.degrees(math.atan2(center_y - nose_points[0].y, center_x - nose_points[0].x)),
-	#"left": math.degrees(math.atan2(nose_points[4].y - center_y, nose_points[4].x - center_x)),
-	#"right": math.degrees(math.atan2(center_y - nose_points[4].y, center_x - nose_points[4].x)),
-	#}
 
 	return angles, center_x, center_y
 
@@ -295,8 +282,44 @@ def draw_nose_direction(image, nose_direction, center_x, center_y):
 	cv2.line(image, (int(center_x), int(center_y)), (end_x, end_y), line_color, 2)
 
 
-    
-    
+def detect_hands(image):
+	
+	mp_hands = mp.solutions.hands
+	hands = mp_hands.Hands(
+		static_image_mode=True,
+		max_num_hands=2,
+		min_detection_confidence=0.5,
+		min_tracking_confidence=0.5
+	)
+	
+	image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+	
+	results = hands.process(image)
+	
+	if results.multi_hand_landmarks:
+		return results.multi_hand_landmarks
+	else:
+		return None
+
+
+def checkDistraction(height, width, hand_landmarks, threshold):
+	if hand_landmarks is None:
+		return False  # No hand landmarks detected, not distracted
+		
+	bottom_right = (0, height - height // 3)
+	bottom_left = (width, height - height // 3)
+
+	# Create a NumPy array containing the two coordinates of the crossline
+	crossline = np.array([bottom_left, bottom_right], dtype=int)
+
+	landmarks_below_crossline = sum(1 for landmark in hand_landmarks[0].landmark if landmark.y * height > height // 3)
+
+	# Check if the number of landmarks below the crossline exceeds the threshold
+	is_below_crossline = landmarks_below_crossline >= threshold
+
+	return is_below_crossline
+
+
 def debugFaceConsolePrint(lme,rme,pts,lmark,dlmark,rmark,drmark,lmouthmatched,rmouthmatched):
 	print('Left Mouth Egde:',lme)
 	print('Right Mouth Egde:',rme)
@@ -316,7 +339,7 @@ def debugFaceConsolePrint(lme,rme,pts,lmark,dlmark,rmark,drmark,lmouthmatched,rm
 	    print("Right Mouth Endpoint is outside the face oval.")
 
 		
-def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind):
+def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter, imageind):
 
 	scenery = "Not Found"
 	
@@ -324,24 +347,17 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 	size = image.shape
 	annotated_image = image.copy()
 	
-
-	#Debug writing
-	#printlandmarks(results.multi_face_landmarks)
-	
 	if results.multi_face_landmarks:
 		dist=[]
 	
 		landmarks = results.multi_face_landmarks[0] #only one face
-		#print('###',landmarks)
-		
-		#mp_drawing.draw_landmarks(annotated_image, landmarks, landmark_drawing_spec=drawing_spec) # draw every match
 		
 		faceXY = []
 		ih, iw, _ = annotated_image.shape
 		for id,lm in enumerate(landmarks.landmark):                           # loop over all land marks of one face
 			x,y = int(lm.x*iw), int(lm.y*ih)
 			# print(lm)
-			faceXY.append((x, y))                                           # put all xy points in neat array
+			faceXY.append((x, y))                                         # put all xy points in neat array
 
 		image_points = np.array([
 			faceXY[19],     # "nose"
@@ -352,11 +368,9 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 			faceXY[287]     # "right mouth"
 		], dtype="double")
 		
+		# plot the key markers of the face
 		for i in image_points:
 			cv2.circle(annotated_image,(int(i[0]),int(i[1])),4,(255,0,0),-1)
-			
-		
-#############################################
 
 		right_coords = [landmarks.landmark[p] for p in RIGHT_EYE]
 		left_coords = [landmarks.landmark[p] for p in LEFT_EYE]
@@ -378,28 +392,14 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 		lpoint_inside_oval = cv2.pointPolygonTest(pts, (image_points[4][0], image_points[4][1]), False)
 		rpoint_inside_oval = cv2.pointPolygonTest(pts, (image_points[5][0], image_points[5][1]), False)
 		
-		#nose_direction, cx, cy = calculate_nose_direction(landmarks.landmark,image_points[0])
-		#print("Nose Direction (Degrees):")
-		#print("Up:", nose_direction["up"])
-		#print("Down:", nose_direction["down"])
-		#print("Left:", nose_direction["left"])
-		#print("Right:", nose_direction["right"])
-		# draw vector head position
-		#draw_nose_direction(annotated_image, nose_direction["up"], cx, cy)
-		#cv2.line(annotated_image, p1, p2, (255, 0, 0), 2)
-		
 		#calculating nose direction vector
 		maxXY = max(faceXY, key=x_element)[0], max(faceXY, key=y_element)[1]
 		minXY = min(faceXY, key=x_element)[0], min(faceXY, key=y_element)[1]
 
-		#xcenter = (maxXY[0] + minXY[0]) / 2
-		#ycenter = (maxXY[1] + minXY[1]) / 2
 		xcenter = int(image_points[0][0])
 		ycenter = int(image_points[0][1])
-		print(xcenter,ycenter )
-		# faceID, distance, maxXY, minXY
+
 		dist.append((0, (int(((xcenter-width/2)**2+(ycenter-height/2)**2)**.4)), maxXY, minXY)) 
-		#print(image_points)
 		
 		dist_coeffs = np.zeros((4, 1))  # Assuming no lens distortion
 		focal_length = size[1]
@@ -420,7 +420,22 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 		cv2.line(annotated_image, p1, p2, (255, 0, 0), 2)
 		
 		noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
+		
+		# calculate and drwa hand positions
+		
+		hand_landmarks = detect_hands(annotated_image)
+		
+		if hand_landmarks is not None:
+			for hand_landmark in hand_landmarks:
+				mp_drawing.draw_landmarks(annotated_image, hand_landmark, mp_hands.HAND_CONNECTIONS)
+		
+		is_below = checkDistraction(height, width, hand_landmarks,15)
 
+		if is_below:
+		    print("Most hand landmarks are beneath the crossline.")
+		else:
+		    print("Not enough hand landmarks are beneath the crossline.")
+					
 		print("Azimuth Angle in degrees:", noseDirAng)
 		print(success, rotation_vector, translation_vector)
 		print(nose_end_point2D, jacobian)
@@ -447,102 +462,112 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 			facedir_horiz = -1 # left
 		elif not lme and rme:
 			facedir_horiz = 1  # right
-		print('h',facedir_horiz) 
-		print(rotation_vector[1],rotation_vector[2])
+		print('h',facedir_horiz )
+		
 			
 		# face position up-straight-down
 		facedir_vert = 99
-		if is_between(-0.6, rotation_vector[1], 0.2) and is_between(-0.6, rotation_vector[2], 0.2):
-			facedir_vert = 0  # straight
-		#elif is_between(-0.03, rotation_vector[1], -0.08) and rotation_vector[2] > -0.6 :
-		#	facedir_vert = 1 # up
-		#elif  rotation_vector[1] < -2 and is_between(0, rotation_vector[2], 1.5):
-	#		facedir_vert = -1 #down
-		print('v',facedir_vert) 
-			
-		# Calculate eye distances
+		if facedir_horiz == -1:
+			if int(noseDirAng[0])<0 and rotation_vector[1]>3 and is_between(-0.6, rotation_vector[2], 0.6):
+				facedir_vert = 0  # straight
+			if int(noseDirAng[0])>0 and is_between(-3, rotation_vector[1], 0) and is_between(-0.6, rotation_vector[2], 0.6):
+				facedir_vert = 0  # left			
+		elif facedir_horiz==0:
+			if int(noseDirAng[0])<0 and is_between(0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
+				facedir_vert = 0  # straight
+			elif int(noseDirAng[0])>0 and is_between(-0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
+				facedir_vert = 1  # up
+			elif int(noseDirAng[0])<0 and is_between(-4, rotation_vector[1], 0) and is_between(0, rotation_vector[2], 1.5):
+				facedir_vert = -1  # down
+			print('#',facedir_vert,int(noseDirAng[0]),is_between(-3, rotation_vector[1], 0), is_between(0, rotation_vector[2], 1.5))
+		elif facedir_horiz==1:
+			if int(noseDirAng[0])<0 and is_between(-0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
+				facedir_vert = 0  # straight
+			if int(noseDirAng[0])<0 and is_between(0.61, rotation_vector[1], 3) and is_between(-0.6, rotation_vector[2], 0.6):
+				facedir_vert = 0  # right
+		
+		print('h',facedir_vert )
+		
+		# Calculate eye vertikal distances
 		rdelta = rmark[3] - rmark[2]
 		ldelta = lmark[3] - lmark[2]
 		drowsy = False
-		if rdelta < 0.03 and ldelta < 0.03:
+		distracted = False
+		
+		if facedir_vert == -1 and is_below:
+			distracted = True
+		elif rdelta < 0.03 and ldelta < 0.03:
 			drowsy = True
 		
 		if drowsy:
 			if facedir_horiz==0:
 				if facedir_vert == 0:
-					scenery = "drowsy and looking straigt forward"
+					scenery = "drowsy, face turned into straight direction, looking forward"
 				elif facedir_vert == -1:
-					scenery = "drowsy and looking down"
+					scenery = "drowsy, face turned into straight direction, looking downward"
 				elif facedir_vert == 1:
-					scenery = "drowsy and looking up"
+					scenery = "drowsy, face turned into straight direction, looking upward"
 				elif facedir_vert == 99:
 					scenery = "drowsy and looking in straight direction, vertical pose not detectable"
 			elif facedir_horiz==-1:
 				if facedir_vert == 0:
-					scenery = "drowsy and looking in left direction, straight"
+					scenery = "drowsy, face turned into left direction, looking forward"
 				elif facedir_vert == -1:
-					scenery = "drowsy and looking in left direction, down"
+					scenery = "drowsy, face turned into left direction, looking downward"
 				elif facedir_vert == 1:
-					scenery = "drowsy and looking in left direction, up"
+					scenery = "drowsy, face turned into left direction, looking upward"
 				elif facedir_vert == 99:
-					scenery = "drowsy and looking in left direction, vertical pose not detectable"
+					scenery = "drowsy, face turned into left direction, vertical pose not detectable"
 			elif facedir_horiz==1:
 				if facedir_vert == 0:
-					scenery = "drowsy and looking in right direction, straight"
+					scenery = "drowsy, face turned into right direction, looking forward"
 				elif facedir_vert == -1:
-					scenery = "drowsy and looking in right direction, down"
+					scenery = "drowsy, face turned into right direction, looking downward"
 				elif facedir_vert == 1:
-					scenery = "drowsy and looking in right direction, up"
+					scenery = "drowsy, face turned into right direction, looking upward"
 				elif facedir_vert == 99:
 					scenery = "drowsy and looking in right direction, vertical pose not detectable"
 			elif facedir_horiz==99:
 				scenery = "drowsy and direction not detectable"
+		elif distracted:
+			if facedir_horiz==0:
+				scenery = "distracted, face turned into straight direction, looking downward"
+			elif facedir_horiz==-1:
+				scenery = "distracted, face turned into left direction, looking downward"
+			elif facedir_horiz==1:
+				scenery = "distracted, face turned into right direction, looking downward"
 		else:
 			if facedir_horiz==0:
 				if facedir_vert == 0:
-					scenery = "awake and looking straigt forward"
+					scenery = "awake, face turned into straight direction, looking forward"
 				elif facedir_vert == -1:
-					scenery = "awake and looking down"
+					scenery = "awake, face turned into straight direction, looking downward"
 				elif facedir_vert == 1:
-					scenery = "awake and looking up"
+					scenery = "awake, face turned into straight direction, looking upward"
 				elif facedir_vert == 99:
-					scenery = "awake and looking in straight direction, vertical pose not detectable"
+					scenery = "awake, face turned into straight direction, vertical pose not detectable"
 			elif facedir_horiz==-1:
 				if facedir_vert == 0:
-					scenery = "awake and looking in left direction, straight"
+					scenery = "awake, face turned into left direction, looking forward"
 				elif facedir_vert == -1:
-					scenery = "awake and looking in left direction, down"
+					scenery = "awake, face turned into left direction, looking downward"
 				elif facedir_vert == 1:
-					scenery = "awake and looking in left direction, up"
+					scenery = "awake, face turned into left direction, looking upward"
 				elif facedir_vert == 99:
-					scenery = "awake and looking in left direction, vertical pose not detectable"
+					scenery = "awake, face turned into left direction, vertical pose not detectable"
 			elif facedir_horiz==1:
 				if facedir_vert == 0:
-					scenery = "awake and looking in right direction, straight"
+					scenery = "awake, face turned into right direction, looking forward"
 				elif facedir_vert == -1:
-					scenery = "awake and looking in right direction, down"
+					scenery = "awake, face turned into right direction, looking downward"
 				elif facedir_vert == 1:
-					scenery = "awake and looking in right direction, up"
+					scenery = "awake, face turned into right direction, looking upward"
 				elif facedir_vert == 99:
-					scenery = "awake and looking in right direction, vertical pose not detectable"
+					scenery = "awake, face turned into right direction, vertical pose not detectable"
 			elif facedir_horiz==99:
 				scenery = "awake and direction not detectable"
 
 
-		#debud print - uncomment
-		#debugFaceConsolePrint(image_points[4],image_points[5],pts,lmark,ldelta,rmark,rdelta,
-		#	lpoint_inside_oval,rpoint_inside_oval)
-		
-		#if pose == -1:
-		#	draw_nose_direction(annotated_image, nose_direction["left"], cx, cy)
-		#	print('#')
-		#elif pose == 0:
-	#		draw_nose_direction(annotated_image, nose_direction["right"], cx, cy)
-	#		print('##')
-	#	elif pose == 1:
-	#		draw_nose_direction(annotated_image, nose_direction["right"], cx, cy)	
-	#		print('###')
-				
 		mp_drawing.draw_landmarks(
 			image=annotated_image,
 			landmark_list=landmarks,
@@ -554,15 +579,6 @@ def decode_mediapipe(image, results, thresholds, consecframes, counter, imageind
 
 
 
-
-
-
-#############################################
-
-		
-
-		
-			
 		dist.sort(key=y_element)
 		# print(dist)
 		
@@ -607,9 +623,6 @@ def mediapipeprocess():
 	thresholds = [drowsiness_threshold, awake_threshold, distraction_threshold, mar_threshold]
 	fname=""
 	
-	
-	
-	
 	while True:
 		if checkConfigQueue():
 			config = getQueuingConfig()
@@ -648,12 +661,16 @@ def mediapipeprocess():
 					
 					# Convert the BGR image to RGB before processing.
 					results = face_mesh.process(cv2.cvtColor(resized_image, cv2.COLOR_BGR2RGB))
-
+					
+					# hand pose detection
+					mp_hands = mp.solutions.hands
+					
 					# calculate face mesh landmarks on the image
 					if not results.multi_face_landmarks:
 						continue
 					
-					result = decode_mediapipe(resized_image, results, thresholds, consecframes, counter, True)
+					result = decode_mediapipe(resized_image, results, mp_hands, thresholds, consecframes, counter, True)
+				
 				print(result["scenery"])
 				# Send scenery to Flask server via a queue 
 				putScenery(result["scenery"])	
