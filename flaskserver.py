@@ -33,7 +33,7 @@ app1.config['UPLOAD_FOLDER_VID'] = UPLOAD_FOLDER_VID
 #app1._static_folder = UPLOAD_FOLDER_IMG
 
 initial_filenames = {
-    'image': ['profileleft-down_drowsy_1.jpeg'],
+    'image': ['initial.jpeg'],
     'video': ['awake.mp4'],
 }
 
@@ -48,9 +48,9 @@ def favicon():
 
 @app1.route('/image_feed')
 def image_feed():
-	image_path = os.path.join(app1.config['UPLOAD_FOLDER_IMG'], 'profileleft-down_drowsy_1.jpeg')
+	image_path = os.path.join(app1.config['UPLOAD_FOLDER_IMG'], 'initial.jpeg')
 	
-	fname = {'filename': 'profileleft-down_drowsy.jpeg_1'}
+	fname = {'filename': 'initial.jpeg_1'}
         
 	setQueuingFName(fname)
 
