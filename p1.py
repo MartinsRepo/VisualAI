@@ -205,7 +205,10 @@ def eyesExtractor(right_eye_coords, left_eye_coords):
 	r_eye_marker = [r_min_x,r_max_x,r_min_y,r_max_y]
 	l_eye_marker = [l_min_x,l_max_x,l_min_y,l_max_y]
 	
-	return r_eye_marker, l_eye_marker
+	# Calculate the Y deviation of the right eye from the left eye
+	y_deviation = r_min_y - l_min_y
+	
+	return r_eye_marker, l_eye_marker, y_deviation
 
 
 # Face Square Extrctor function,
@@ -376,8 +379,9 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 		left_coords = [landmarks.landmark[p] for p in LEFT_EYE]
 		faceoval_coords = [landmarks.landmark[p] for p in FACE_OVAL]
 
-		rmark, lmark = eyesExtractor(right_coords, left_coords)
+		rmark, lmark, tilt = eyesExtractor(right_coords, left_coords)
 		fmark = faceSquareExtractor(faceoval_coords)
+		print('tilt eye-line:',tilt*100)
 		
 		cv2.circle(annotated_image,(int(fmark[0]*iw),int(fmark[1]*ih)),6,(255,100,0),-1)
 		cv2.circle(annotated_image,(int(fmark[2]*iw),int(fmark[3]*ih)),6,(255,100,0),-1)
