@@ -440,9 +440,8 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 		else:
 		    print("Not enough hand landmarks are beneath the crossline.")
 					
-		print("Azimuth Angle in degrees:", noseDirAng)
-		print(success, rotation_vector, translation_vector)
-		print(nose_end_point2D, jacobian)
+		print("Azimuth Angle in degrees:", noseDirAng[0])
+		print('Rot',rotation_vector)
 		
 		
 		# Create scenery marker
@@ -466,7 +465,7 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 			facedir_horiz = -1 # left
 		elif not lme and rme:
 			facedir_horiz = 1  # right
-		print('h',facedir_horiz )
+		print('facedir horizontal',facedir_horiz )
 		
 			
 		# face position up-straight-down
@@ -490,7 +489,7 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 			if int(noseDirAng[0])<0 and is_between(0.61, rotation_vector[1], 3) and is_between(-0.6, rotation_vector[2], 0.6):
 				facedir_vert = 0  # right
 		
-		print('h',facedir_vert )
+		print('facedir vertical',facedir_vert )
 		
 		# Calculate eye vertikal distances
 		rdelta = rmark[3] - rmark[2]
