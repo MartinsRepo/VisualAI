@@ -470,24 +470,54 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 			
 		# face position up-straight-down
 		facedir_vert = 99
-		if facedir_horiz == -1:
-			if int(noseDirAng[0])<0 and rotation_vector[1]>3 and is_between(-0.6, rotation_vector[2], 0.6):
-				facedir_vert = 0  # straight
-			if int(noseDirAng[0])>0 and is_between(-3, rotation_vector[1], 0) and is_between(-0.6, rotation_vector[2], 0.6):
-				facedir_vert = 0  # left			
-		elif facedir_horiz==0:
-			if int(noseDirAng[0])<0 and is_between(0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
-				facedir_vert = 0  # straight
-			elif int(noseDirAng[0])>0 and is_between(-0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
-				facedir_vert = 1  # up
-			elif int(noseDirAng[0])<0 and is_between(-4, rotation_vector[1], 0) and is_between(0, rotation_vector[2], 1.5):
-				facedir_vert = -1  # down
-			print('#',facedir_vert,int(noseDirAng[0]),is_between(-3, rotation_vector[1], 0), is_between(0, rotation_vector[2], 1.5))
-		elif facedir_horiz==1:
-			if int(noseDirAng[0])<0 and is_between(-0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
-				facedir_vert = 0  # straight
-			if int(noseDirAng[0])<0 and is_between(0.61, rotation_vector[1], 3) and is_between(-0.6, rotation_vector[2], 0.6):
-				facedir_vert = 0  # right
+		
+		# detect vertical position
+		if facedir_horiz == 0:
+			if is_between(-90, noseDirAng[0], 0) and is_between(-3.5, rotation_vector[0], -2.5) and is_between(-0.25, rotation_vector[1], 0.25):
+				facedir_vert = 0
+			elif is_between(-10, noseDirAng[0], 10) and  is_between(-2.49, rotation_vector[0], 0):
+				facedir_vert= -1
+			elif is_between(-180, noseDirAng[0], -160) and is_between(-0.6, rotation_vector[1], 0):
+				facedir_vert = 1
+
+		elif facedir_horiz == -1:
+			if is_between(60, noseDirAng[0], 170) :
+				if is_between(-0.6, rotation_vector[0], 0.6):
+					facedir_vert = -1
+				elif rotation_vector[0]<0.6 or rotation_vector[0]>0.6 and tilt>2:
+					facedir_vert = 1
+				else:
+					facedir_vert = 0
+					
+			if noseDirAng[0] < 60 and tilt < -2:
+				facedir_vert = 1	
+		elif facedir_horiz == 1:
+			if is_between(-170, noseDirAng[0], -60) :
+				if noseDirAng[0] >- 120 and is_between(-2.5, tilt, 2.5):
+					facedir_vert = -1
+				elif is_between(-0.8, rotation_vector[0], -0.2):
+						facedir_vert = -1
+			elif is_between(-59, noseDirAng[0], 0) and tilt>3:
+				facedir_vert = 1
+		
+#		if facedir_horiz == -1:
+#			if int(noseDirAng[0])<0 and rotation_vector[1]>3 and is_between(-0.6, rotation_vector[2], 0.6):
+#				facedir_vert = 0  # straight
+#			if int(noseDirAng[0])>0 and is_between(-3, rotation_vector[1], 0) and is_between(-0.6, rotation_vector[2], 0.6):
+#				facedir_vert = 0  # left			
+#		elif facedir_horiz==0:
+#			if int(noseDirAng[0])<0 and is_between(0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
+#				facedir_vert = 0  # straight
+#			elif int(noseDirAng[0])>0 and is_between(-0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
+#				facedir_vert = 1  # up
+#			elif int(noseDirAng[0])<0 and is_between(-4, rotation_vector[1], 0) and is_between(0, rotation_vector[2], 1.5):
+#				facedir_vert = -1  # down
+#			print('#',facedir_vert,int(noseDirAng[0]),is_between(-3, rotation_vector[1], 0), is_between(0, rotation_vector[2], 1.5))
+#		elif facedir_horiz==1:
+#			if int(noseDirAng[0])<0 and is_between(-0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
+#				facedir_vert = 0  # straight
+#			if int(noseDirAng[0])<0 and is_between(0.61, rotation_vector[1], 3) and is_between(-0.6, rotation_vector[2], 0.6):
+#				facedir_vert = 0  # right
 		
 		print('facedir vertical',facedir_vert )
 		
