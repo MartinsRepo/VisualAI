@@ -25,6 +25,7 @@ from queue_manager import queueConfig
 from queue_manager import queueFName
 from queue_manager import queueModifiedImage
 from queue_manager import queueScenery
+from queue_manager import queueRadioSel
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -51,6 +52,15 @@ RIGHT_EYE=[ 33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 1
 FACE_OVAL=[ 10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103,67, 109]
 #nose
 NOSE=[ 129, 49, 131, 134, 51, 5, 281, 163, 160, 279, 350, 327, 326, 97, 98] 
+
+# later to flask menu
+# Define thresholds for drowsiness and distraction detection
+drowsy_threshold = 150  # Adjust as needed
+distracted_threshold = 15  # Adjust as needed
+# Initialize variables for tracking EAR and frame counters
+ear_threshold_frames = 48  # Adjust as needed
+ear_frames = [0, 0]
+ear = [0, 0]
 
 UPLOAD_FOLDER_IMG =  os.path.join('images/drvmonpics') 
 
@@ -145,6 +155,23 @@ def checkFNameQueue():
 	return ret
 
 
+# getting uploaded option from Flask 	
+def getQueuingRadioSel():
+	data = None
+	try:
+		data = queueRadioSel.get_nowait()
+	except queueRadioSel.empty():
+		pass
+		
+	return data
+
+
+def checkRadioSelQueue():
+	ret = False
+	if not queueRadioSel.empty():
+		ret = True
+	return ret
+
 # put modifyied image to the queue
 def putQueuingModImage(data):
 	while not queueModifiedImage.empty():
@@ -210,6 +237,20 @@ def eyesExtractor(right_eye_coords, left_eye_coords):
 	
 	return r_eye_marker, l_eye_marker, y_deviation
 
+
+# "Eye Aspect Ratio" (EAR) introduced by Soukupová and Čech in their paper 
+# "Real-Time Eye Blink Detection Using Facial Landmarks."
+def eye_aspect_ratio(eye):
+	# Calculate the EAR for a given eye (e.g., eye = [p1, p2, p3, p4, p5, p6])
+	# Calculate the distances between eye landmarks
+	A = np.sqrt((eye[1].x - eye[5].x) ** 2 + (eye[1].y - eye[5].y) ** 2 + (eye[1].z - eye[5].z) ** 2)
+	B = np.sqrt((eye[2].x - eye[4].x) ** 2 + (eye[2].y - eye[4].y) ** 2 + (eye[2].z - eye[4].z) ** 2)
+	C = np.sqrt((eye[0].x - eye[3].x) ** 2 + (eye[0].y - eye[3].y) ** 2 + (eye[0].z - eye[3].z) ** 2)
+
+	# Calculate the EAR
+	ear = (A + B) / (2.0 * C)
+	return ear
+    
 
 # Face Square Extrctor function,
 def faceSquareExtractor(faceoval):
@@ -375,14 +416,39 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 		for i in image_points:
 			cv2.circle(annotated_image,(int(i[0]),int(i[1])),4,(255,0,0),-1)
 
-		right_coords = [landmarks.landmark[p] for p in RIGHT_EYE]
-		left_coords = [landmarks.landmark[p] for p in LEFT_EYE]
+		# Eye ectractions
+		right_eye_landmarks = [landmarks.landmark[p] for p in RIGHT_EYE]
+		left_eye_landmarks = [landmarks.landmark[p] for p in LEFT_EYE]
 		faceoval_coords = [landmarks.landmark[p] for p in FACE_OVAL]
 
-		rmark, lmark, tilt = eyesExtractor(right_coords, left_coords)
-		fmark = faceSquareExtractor(faceoval_coords)
-		print('tilt eye-line:',tilt*100)
+		rmark, lmark, tilt = eyesExtractor(right_eye_landmarks, left_eye_landmarks)
 		
+		tilt=tilt*100
+		print('tilt eye-line:',tilt)
+		
+		 # Calculate EAR for both eyes
+		left_eye_ear = eye_aspect_ratio(left_eye_landmarks)
+		right_eye_ear = eye_aspect_ratio(right_eye_landmarks)
+		
+		# case of static image
+		aspect_ratio_indicator = False
+		lee = False
+		ree = False
+		if imageind:
+			ear[0] = int(left_eye_ear*100)
+			ear[1] = int(right_eye_ear*100)
+			for i in range(2):
+				print(ear[0])
+				if ear[i] < drowsy_threshold:
+					if i==0: 
+						lee = True
+					else: 
+						ree = True
+					
+		aspect_ratio_indicator = lee and ree
+		
+		# calculating face oval
+		fmark = faceSquareExtractor(faceoval_coords)
 		cv2.circle(annotated_image,(int(fmark[0]*iw),int(fmark[1]*ih)),6,(255,100,0),-1)
 		cv2.circle(annotated_image,(int(fmark[2]*iw),int(fmark[3]*ih)),6,(255,100,0),-1)
 		
@@ -428,18 +494,20 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 		# calculate and drwa hand positions
 		
 		hand_landmarks = detect_hands(annotated_image)
+		str_hands=''
+		is_below=False
 		
 		if hand_landmarks is not None:
 			for hand_landmark in hand_landmarks:
 				mp_drawing.draw_landmarks(annotated_image, hand_landmark, mp_hands.HAND_CONNECTIONS)
 		
-		is_below = checkDistraction(height, width, hand_landmarks,15)
+			is_below = checkDistraction(height, width, hand_landmarks,15)
 
-		if is_below:
-		    print("Most hand landmarks are beneath the crossline.")
-		else:
-		    print("Not enough hand landmarks are beneath the crossline.")
-					
+			if is_below:
+			    str_hands="Hands below the face."
+			else:
+			    str_hands="Hands near the face."
+						
 		print("Azimuth Angle in degrees:", noseDirAng[0])
 		print('Rot',rotation_vector)
 		
@@ -483,41 +551,20 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 		elif facedir_horiz == -1:
 			if is_between(60, noseDirAng[0], 170) :
 				if is_between(-0.6, rotation_vector[0], 0.6):
-					facedir_vert = -1
-				elif rotation_vector[0]<0.6 or rotation_vector[0]>0.6 and tilt>2:
-					facedir_vert = 1
-				else:
 					facedir_vert = 0
-					
-			if noseDirAng[0] < 60 and tilt < -2:
-				facedir_vert = 1	
+				elif rotation_vector[0]<0.6 or rotation_vector[0]>0.6 and tilt>=2:
+					facedir_vert = 1	
+			elif is_between(0, noseDirAng[0], 59) and tilt < -2:
+				facedir_vert = -1	
 		elif facedir_horiz == 1:
 			if is_between(-170, noseDirAng[0], -60) :
 				if noseDirAng[0] >- 120 and is_between(-2.5, tilt, 2.5):
-					facedir_vert = -1
+					facedir_vert = 0
 				elif is_between(-0.8, rotation_vector[0], -0.2):
-						facedir_vert = -1
+						facedir_vert = 1
 			elif is_between(-59, noseDirAng[0], 0) and tilt>3:
-				facedir_vert = 1
+				facedir_vert = -1
 		
-#		if facedir_horiz == -1:
-#			if int(noseDirAng[0])<0 and rotation_vector[1]>3 and is_between(-0.6, rotation_vector[2], 0.6):
-#				facedir_vert = 0  # straight
-#			if int(noseDirAng[0])>0 and is_between(-3, rotation_vector[1], 0) and is_between(-0.6, rotation_vector[2], 0.6):
-#				facedir_vert = 0  # left			
-#		elif facedir_horiz==0:
-#			if int(noseDirAng[0])<0 and is_between(0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
-#				facedir_vert = 0  # straight
-#			elif int(noseDirAng[0])>0 and is_between(-0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
-#				facedir_vert = 1  # up
-#			elif int(noseDirAng[0])<0 and is_between(-4, rotation_vector[1], 0) and is_between(0, rotation_vector[2], 1.5):
-#				facedir_vert = -1  # down
-#			print('#',facedir_vert,int(noseDirAng[0]),is_between(-3, rotation_vector[1], 0), is_between(0, rotation_vector[2], 1.5))
-#		elif facedir_horiz==1:
-#			if int(noseDirAng[0])<0 and is_between(-0.6, rotation_vector[1], 0.6) and is_between(-0.6, rotation_vector[2], 0.6):
-#				facedir_vert = 0  # straight
-#			if int(noseDirAng[0])<0 and is_between(0.61, rotation_vector[1], 3) and is_between(-0.6, rotation_vector[2], 0.6):
-#				facedir_vert = 0  # right
 		
 		print('facedir vertical',facedir_vert )
 		
@@ -529,76 +576,76 @@ def decode_mediapipe(image, results, mp_hands, thresholds, consecframes, counter
 		
 		if facedir_vert == -1 and is_below:
 			distracted = True
-		elif rdelta < 0.03 and ldelta < 0.03:
+		elif rdelta < 0.03 and ldelta < 0.03 and aspect_ratio_indicator:
 			drowsy = True
 		
 		if drowsy:
 			if facedir_horiz==0:
 				if facedir_vert == 0:
-					scenery = "drowsy, face turned into straight direction, looking forward"
+					scenery = "Person drowsy, face turned into straight direction, looking forward. "+str_hands
 				elif facedir_vert == -1:
-					scenery = "drowsy, face turned into straight direction, looking downward"
+					scenery = "Person drowsy, face turned into straight direction, looking downward. "+str_hands
 				elif facedir_vert == 1:
-					scenery = "drowsy, face turned into straight direction, looking upward"
+					scenery = "Person drowsy, face turned into straight direction, looking upward. "+str_hands
 				elif facedir_vert == 99:
-					scenery = "drowsy and looking in straight direction, vertical pose not detectable"
+					scenery = "Person drowsy and looking in straight direction, vertical pose not detectable. "+str_hands
 			elif facedir_horiz==-1:
 				if facedir_vert == 0:
-					scenery = "drowsy, face turned into left direction, looking forward"
+					scenery = "Person drowsy, face turned into left direction, looking forward. "+str_hands
 				elif facedir_vert == -1:
-					scenery = "drowsy, face turned into left direction, looking downward"
+					scenery = "Person drowsy, face turned into left direction, looking downward. "+str_hands
 				elif facedir_vert == 1:
-					scenery = "drowsy, face turned into left direction, looking upward"
+					scenery = "Person drowsy, face turned into left direction, looking upward. "+str_hands
 				elif facedir_vert == 99:
-					scenery = "drowsy, face turned into left direction, vertical pose not detectable"
+					scenery = "Person drowsy, face turned into left direction, vertical pose not detectable. "+str_hands
 			elif facedir_horiz==1:
 				if facedir_vert == 0:
-					scenery = "drowsy, face turned into right direction, looking forward"
+					scenery = "Person drowsy, face turned into right direction, looking forward. "+str_hands
 				elif facedir_vert == -1:
-					scenery = "drowsy, face turned into right direction, looking downward"
+					scenery = "Person drowsy, face turned into right direction, looking downward. "+str_hands
 				elif facedir_vert == 1:
-					scenery = "drowsy, face turned into right direction, looking upward"
+					scenery = "Person drowsy, face turned into right direction, looking upward. "+str_hands
 				elif facedir_vert == 99:
-					scenery = "drowsy and looking in right direction, vertical pose not detectable"
+					scenery = "Person drowsy and looking in right direction, vertical pose not detectable. "+str_hands
 			elif facedir_horiz==99:
-				scenery = "drowsy and direction not detectable"
+				scenery = "Person drowsy and direction not detectable. "+str_hands
 		elif distracted:
 			if facedir_horiz==0:
-				scenery = "distracted, face turned into straight direction, looking downward"
+				scenery = "Person distracted, face turned into straight direction, looking downward. "+str_hands
 			elif facedir_horiz==-1:
-				scenery = "distracted, face turned into left direction, looking downward"
+				scenery = "Person distracted, face turned into left direction, looking downward. "+str_hands
 			elif facedir_horiz==1:
-				scenery = "distracted, face turned into right direction, looking downward"
+				scenery = "Person distracted, face turned into right direction, looking downward. "+str_hands
 		else:
 			if facedir_horiz==0:
 				if facedir_vert == 0:
-					scenery = "awake, face turned into straight direction, looking forward"
+					scenery = "Person awake, face turned into straight direction, looking forward. "+str_hands
 				elif facedir_vert == -1:
-					scenery = "awake, face turned into straight direction, looking downward"
+					scenery = "Person awake, face turned into straight direction, looking downward. "+str_hands
 				elif facedir_vert == 1:
-					scenery = "awake, face turned into straight direction, looking upward"
+					scenery = "Person awake, face turned into straight direction, looking upward. "+str_hands
 				elif facedir_vert == 99:
-					scenery = "awake, face turned into straight direction, vertical pose not detectable"
+					scenery = "Person awake, face turned into straight direction, vertical pose not detectable. "+str_hands
 			elif facedir_horiz==-1:
 				if facedir_vert == 0:
-					scenery = "awake, face turned into left direction, looking forward"
+					scenery = "Person awake, face turned into left direction, looking forward. "+str_hands
 				elif facedir_vert == -1:
-					scenery = "awake, face turned into left direction, looking downward"
+					scenery = "Person awake, face turned into left direction, looking downward. "+str_hands
 				elif facedir_vert == 1:
-					scenery = "awake, face turned into left direction, looking upward"
+					scenery = "Person awake, face turned into left direction, looking upward. "+str_hands
 				elif facedir_vert == 99:
-					scenery = "awake, face turned into left direction, vertical pose not detectable"
+					scenery = "Person awake, face turned into left direction, vertical pose not detectable. "+str_hands
 			elif facedir_horiz==1:
 				if facedir_vert == 0:
-					scenery = "awake, face turned into right direction, looking forward"
+					scenery = "Person awake, face turned into right direction, looking forward. "+str_hands
 				elif facedir_vert == -1:
-					scenery = "awake, face turned into right direction, looking downward"
+					scenery = "Person awake, face turned into right direction, looking downward. "+str_hands
 				elif facedir_vert == 1:
-					scenery = "awake, face turned into right direction, looking upward"
+					scenery = "Person awake, face turned into right direction, looking upward. "+str_hands
 				elif facedir_vert == 99:
-					scenery = "awake, face turned into right direction, vertical pose not detectable"
+					scenery = "Person awake, face turned into right direction, vertical pose not detectable. "+str_hands
 			elif facedir_horiz==99:
-				scenery = "awake and direction not detectable"
+				scenery = "Person awake and direction not detectable. "+str_hands
 
 
 		mp_drawing.draw_landmarks(
@@ -655,8 +702,22 @@ def mediapipeprocess():
 	counter = [frame_counter, distraction_counter, drowsiness_counter, awake_counter, smiling_counter, last_state]
 	thresholds = [drowsiness_threshold, awake_threshold, distraction_threshold, mar_threshold]
 	fname=""
+	using_image = False
+	option = ""
+	
+	face_mesh = mp.solutions.face_mesh.FaceMesh(
+		static_image_mode=True,
+		max_num_faces=1,
+		refine_landmarks=False,
+		min_tracking_confidence=0.01,
+		min_detection_confidence=0.5
+	)
 	
 	while True:
+		if checkRadioSelQueue():
+			option = getQueuingRadioSel()
+			print("Selected option: ",option)
+	
 		if checkConfigQueue():
 			config = getQueuingConfig()
 			print("Configuration Settings:", config)
@@ -667,25 +728,20 @@ def mediapipeprocess():
 			
 			thresholds = [drowsiness_threshold, awake_threshold, distraction_threshold, mar_threshold]
 		
-		if checkFNameQueue():
-			
-			f = getQueuingFName()
+		if option == "image":
+			if checkFNameQueue():
+				
+				f = getQueuingFName()
 
-			key, fn = list(f.items())[0]
-			fname=''.join(fn)
-			extension = os.path.splitext(fname)[1]
+				key, fn = list(f.items())[0]
+				fname=''.join(fn)
+				extension = os.path.splitext(fname)[1]
 
-			print("filename",fname)
-			
-			#load image
-			if extension=='.jpg' or extension=='.jpeg':
-			
-				with mp_face_mesh.FaceMesh(
-					static_image_mode=True,
-					max_num_faces=1,
-					refine_landmarks=False,
-					min_tracking_confidence=0.01,
-					min_detection_confidence=0.5) as face_mesh:
+				print("filename",fname)
+				
+				#load image
+				if extension=='.jpg' or extension=='.jpeg':
+					using_image = True
 					
 					#for idx, file in enumerate(IMAGE_FILES):
 					image = cv2.imread(UPLOAD_FOLDER_IMG+"/"+fname)
@@ -702,16 +758,17 @@ def mediapipeprocess():
 					if not results.multi_face_landmarks:
 						continue
 					
-					result = decode_mediapipe(resized_image, results, mp_hands, thresholds, consecframes, counter, True)
-				
-				print(result["scenery"])
-				# Send scenery to Flask server via a queue 
-				putScenery(result["scenery"])	
-				# Send the modified image to Flask server via a queue
-				putQueuingModImage(result["modified_image"])
+					result = decode_mediapipe(resized_image, results, mp_hands, thresholds, consecframes, counter, using_image)
 					
+					print(result["scenery"])
+					# Send scenery to Flask server via a queue 
+					putScenery(result["scenery"])	
+					# Send the modified image to Flask server via a queue
+					putQueuingModImage(result["modified_image"])
+						
 	
 
 if __name__ == '__main__':
+	
 	mediapipeprocess()
 	

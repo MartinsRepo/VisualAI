@@ -22,6 +22,7 @@ from queue_manager import queueConfig
 from queue_manager import queueFName
 from queue_manager import queueModifiedImage
 from queue_manager import queueScenery
+from queue_manager import queueRadioSel
 
 app1 = Flask(__name__)
 
@@ -137,11 +138,8 @@ def camera_feed():
 @app1.route('/radio-status', methods=['POST'])
 def handle_radio_status():
 	drvmon = request.form.get('drvmon')  # Get the selected radio button's value
-    
-	# You can now use 'drvmon' in your Python code
-	print("Selected value:", drvmon)
-    
-	# Add your logic here
+
+	setQueuingRadioSel(drvmon)
     
 	# Respond with a simple success message
 	return jsonify({"message": "Status updated successfully"})
@@ -215,6 +213,9 @@ def setQueuingConfig(data):
 def setQueuingFName(data):
 	queueFName.put(data)
 	
+# setting selected radiobutton option
+def setQueuingRadioSel(data):
+	queueRadioSel.put(data)
 	
 # setting uploaded filename from Flask 	
 def setQueuingModifiedImage(data):

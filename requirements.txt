@@ -6,3 +6,4 @@ Flask==3.0.0
 selenium==4.15.0
 asgiref==3.7.2
 yolov8==0.0.2
+requesta==2.31.0
