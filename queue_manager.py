@@ -5,4 +5,5 @@ queueConfig = multiprocessing.Queue()
 queueFName = multiprocessing.Queue()
 queueModifiedImage =  multiprocessing.Queue()
 queueScenery =  multiprocessing.Queue()
+queueRadioSel =  multiprocessing.Queue()
 
