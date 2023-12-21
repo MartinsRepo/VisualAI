@@ -1,9 +1,5 @@
-opencv-python==4.8.1.78
-opencv-contrib-python==4.8.1.78
-Pillow==10.0.1
-mediapipe==0.10.7
-Flask==3.0.0
-selenium==4.15.0
-asgiref==3.7.2
-yolov8==0.0.2
-requesta==2.31.0
+opencv_python_headless==4.8.1.78
+streamlit==1.29.0
+mediapipe==0.10.9
+numpy==1.26.2
+Pillow==10.1.0
