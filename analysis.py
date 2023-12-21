@@ -13,11 +13,36 @@ FACE_OVAL=[ 10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365,
 #nose
 NOSE=[ 129, 49, 131, 134, 51, 5, 281, 163, 160, 279, 350, 327, 326, 97, 98] 
 
+
+# 3D model points.
+face3Dmodel = np.array([
+    (0.0, 0.0, 0.0),            # Nose tip
+    (0.0, -330.0, -65.0),       # Chin
+    (-225.0, 170.0, -135.0),    # Left eye left corner
+    (225.0, 170.0, -135.0),     # Right eye right corner
+    (-150.0, -150.0, -125.0),   # Left Mouth corner
+    (150.0, -150.0, -125.0)     # Right mouth corner
+    ], dtype=np.float64)
+
+
 ear = [0, 0]
 
 # Define thresholds for drowsiness and distraction detection
 drowsy_threshold = 150  # Adjust as needed
 distracted_threshold = 15  # Adjust as needed
+
+
+# Helper functions
+def x_element(elem):
+	return elem[0]
+    
+    
+def y_element(elem):
+	return elem[1]
+    
+    
+def is_between(a, x, b):
+	return min(a, b) < x < max(a, b)
 
 
 # converts <class 'mediapipe.framework.formats.landmark_pb2.NormalizedLandmark'> to dictionary
@@ -182,11 +207,47 @@ def faceProfileExtractor(source, landmarks):
 	return rmark, lmark, tilt, faceoval_coords, asr_ind
 
 
+def noseVector(faceXY, image_points, size):
+	
+	height, width = size[:2]
+	p1 = p2 = None
+	distance=[]
+	
+	#calculating nose direction vector
+	maxXY = max(faceXY, key=x_element)[0], max(faceXY, key=y_element)[1]
+	minXY = min(faceXY, key=x_element)[0], min(faceXY, key=y_element)[1]
+	
+	xcenter = int(image_points[0][0])
+	ycenter = int(image_points[0][1])
+	
+	distance.append((0, (int(((xcenter-width/2)**2+(ycenter-height/2)**2)**.4)), maxXY[0], minXY[0]))
+	
+	
+	dist_coeffs = np.zeros((4, 1))  # Assuming no lens distortion
+	focal_length = size[1]
+	center = (size[1] / 2, size[0] / 2)
+	camera_matrix = np.array(
+		[[focal_length, 0, center[0]],
+		[0, focal_length, center[1]],
+		[0, 0, 1]], dtype="double"
+	) 
+
+	(success, rotation_vector, translation_vector) = cv.solvePnP(face3Dmodel, image_points,  camera_matrix, dist_coeffs)
+	
+	(nose_end_point2D, jacobian) = cv.projectPoints(np.array([(0.0, 0.0, 1000.0)]), rotation_vector, translation_vector, camera_matrix, dist_coeffs)
+		
+	# draw vector head position
+	p1 = (int(image_points[0][0]), int(image_points[0][1]))
+	p2 = (int(nose_end_point2D[0][0][0]), int(nose_end_point2D[0][0][1]))
+
+	return p1, p2, distance
+
 
 def decode_mediapipe(source, frame, results, face_count, drawing_spec):
 	
-	dist=[]
+	
 	faceXY = []
+	dist=[]
 	image_points = np.empty((0, 2), int)
 	
 	ih, iw, _ = frame.shape
@@ -199,30 +260,36 @@ def decode_mediapipe(source, frame, results, face_count, drawing_spec):
 			annotated_image = frame.copy()
 			
 			for face_landmarks in results.multi_face_landmarks:
-				
-				f_ar, ip_arr = getImagePoints(face_landmarks, iw, ih)
-				faceXY.append(f_ar)		
-				image_points = np.append(image_points, ip_arr, axis=0)
 
+				f_arr, ip_arr = getImagePoints(face_landmarks, iw, ih)
+
+				faceXY.append(f_arr)		
+				image_points = np.append(image_points, ip_arr, axis=0)
+				#print(image_points)
 				for i in image_points:
-					cv.circle(annotated_image,(int(i[0]),int(i[1])),4,(255,0,0),-1)
+					cv.circle(annotated_image,(int(i[0]),int(i[1])),2,(255,0,0),-1)
 					
 				# Eye and face oval extraction
 				rmark, lmark, tilt, faceoval_coords, aspect_ratio_indicator = faceProfileExtractor('image', face_landmarks)
 				
 				# calculating face oval
 				fmark = faceSquareExtractor(faceoval_coords)
-				cv.circle(annotated_image,(int(fmark[0]*iw),int(fmark[1]*ih)),6,(255,100,0),-1)
-				cv.circle(annotated_image,(int(fmark[2]*iw),int(fmark[3]*ih)),6,(255,100,0),-1)
+				cv.circle(annotated_image,(int(fmark[0]*iw),int(fmark[1]*ih)),2,(255,100,0),-1)
+				cv.circle(annotated_image,(int(fmark[2]*iw),int(fmark[3]*ih)),2,(255,100,0),-1)
 				
 				# draw face oval
 				ovalcoords = extractCoordsFromDict(faceoval_coords,iw,ih)
 		
 				# verify oval coordinates
 				pts = np.array(ovalcoords,np.int32)
-				cv.polylines(annotated_image, [pts], True, (255,100,100), 5)
+				cv.polylines(annotated_image, [pts], True, (255,100,100), 1)
 				
-				
+				## calculate, whether a person looks to the left(right) side or looks in straight direction
+				lpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[4][0], image_points[4][1]), False)
+				rpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[5][0], image_points[5][1]), False)
+
+				p1, p2, dist = noseVector(faceXY, image_points, frame.shape)
+				cv.line(annotated_image, p1, p2, (255, 0, 0), 1)
 
 
 				#print(image_points)
