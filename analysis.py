@@ -137,7 +137,7 @@ def faceSquareExtractor(faceoval):
 	return faceoval_marker
 
 
-# Hand detection
+### Hand detection
 def detect_hands(image):
 	
 	hands = mp_hands.Hands(
@@ -153,6 +153,25 @@ def detect_hands(image):
 		return results.multi_hand_landmarks
 	else:
 		return None
+
+
+
+def checkHandDistraction(height, width, hand_landmarks, threshold):
+	if hand_landmarks is None:
+		return False  # No hand landmarks detected, not distracted
+		
+	bottom_right = (0, height - height // 3)
+	bottom_left = (width, height - height // 3)
+
+	# Create a NumPy array containing the two coordinates of the crossline
+	crossline = np.array([bottom_left, bottom_right], dtype=int)
+
+	landmarks_below_crossline = sum(1 for landmark in hand_landmarks[0].landmark if landmark.y * height > height // 3)
+
+	# Check if the number of landmarks below the crossline exceeds the threshold
+	is_below_crossline = landmarks_below_crossline >= threshold
+
+	return is_below_crossline
 
 
 def extractCoordsFromDict(faceoval_coords,iw,ih):
@@ -281,6 +300,23 @@ def noseVector(faceXY, image_points, size):
 	return p1, p2, distance, nose_end_point2D
 
 
+def scenery_handdetection(height, width, hand_landmarks):
+	
+	# hands
+	str_hands=''
+	is_below=False
+	
+	# 15 is the threshold and can be set dynamical tbd
+	is_below = checkHandDistraction(height, width, hand_landmarks,15)
+
+	if is_below:
+	    str_hands="Hands below the face."
+	else:
+	    str_hands="Hands near the face."
+
+	return str_hands
+
+
 def decode_mediapipe(source, frame, results, face_count, drawing_spec):
 	
 	dist=[]
@@ -332,12 +368,15 @@ def decode_mediapipe(source, frame, results, face_count, drawing_spec):
 
 				# calculate and drwa hand positions
 				hand_landmarks = detect_hands(annotated_image)
-				str_hands=''
-				is_below=False
 				
+				str_hands =''
 				if hand_landmarks is not None:
 					for hand_landmark in hand_landmarks:
 						mp_drawing.draw_landmarks(annotated_image, hand_landmark, mp_hands.HAND_CONNECTIONS)
+					str_hands = scenery_handdetection(ih, iw, hand_landmarks)
+				
+				
+				
 				
 				
 				mp_drawing.draw_landmarks(
