@@ -2,6 +2,12 @@ import mediapipe as mp
 import streamlit as st
 import numpy as np
 import cv2 as cv
+import math
+
+mp_drawing = mp.solutions.drawing_utils
+mp_drawing_styles = mp.solutions.drawing_styles
+mp_face_mesh = mp.solutions.face_mesh
+mp_hands = mp.solutions.hands
 
 #https://raw.githubusercontent.com/google/mediapipe/master/mediapipe/modules/face_geometry/data/canonical_face_model_uv_visualization.png
 # Left eyes indices 
@@ -60,6 +66,20 @@ def convert(NormalizedLandmark):
 	return res_dict
 
 
+# Returns angle in radians
+def calculate_spatial_angles(p1, p2, image_points, nose_end_point2D):
+
+	#delta_x = abs(p1[0] - p2[0])
+	#delta_y = abs(p1[1] - p2[1])
+	delta_x = p2[0] - p1[0]
+	delta_y = p2[1] - p1[1]
+
+	azimuth_radians = math.atan2(delta_x, delta_y)
+	azimuth_degrees = math.degrees(azimuth_radians)
+	
+	return azimuth_degrees, azimuth_radians
+
+
 # Eyes Extrctor function,
 def eyesExtractor(right_eye_coords, left_eye_coords):
 	
@@ -115,6 +135,24 @@ def faceSquareExtractor(faceoval):
 	faceoval_marker = [min_x,min_y,max_x,max_y]
 		
 	return faceoval_marker
+
+
+# Hand detection
+def detect_hands(image):
+	
+	hands = mp_hands.Hands(
+		static_image_mode=True,
+		max_num_hands=2,
+		min_detection_confidence=0.5,
+		min_tracking_confidence=0.5
+	)
+		
+	results = hands.process(image)
+	
+	if results.multi_hand_landmarks:
+		return results.multi_hand_landmarks
+	else:
+		return None
 
 
 def extractCoordsFromDict(faceoval_coords,iw,ih):
@@ -231,7 +269,7 @@ def noseVector(faceXY, image_points, size):
 		[0, focal_length, center[1]],
 		[0, 0, 1]], dtype="double"
 	) 
-
+	print(distance)
 	(success, rotation_vector, translation_vector) = cv.solvePnP(face3Dmodel, image_points,  camera_matrix, dist_coeffs)
 	
 	(nose_end_point2D, jacobian) = cv.projectPoints(np.array([(0.0, 0.0, 1000.0)]), rotation_vector, translation_vector, camera_matrix, dist_coeffs)
@@ -240,32 +278,30 @@ def noseVector(faceXY, image_points, size):
 	p1 = (int(image_points[0][0]), int(image_points[0][1]))
 	p2 = (int(nose_end_point2D[0][0][0]), int(nose_end_point2D[0][0][1]))
 
-	return p1, p2, distance
+	return p1, p2, distance, nose_end_point2D
 
 
 def decode_mediapipe(source, frame, results, face_count, drawing_spec):
 	
-	
-	faceXY = []
 	dist=[]
-	image_points = np.empty((0, 2), int)
 	
 	ih, iw, _ = frame.shape
 	
 	
 	if results.multi_face_landmarks:
 		if source == 'image':	
-			#Face Landmark Drawing
 			
+			#Face Landmark Drawing
 			annotated_image = frame.copy()
 			
 			for face_landmarks in results.multi_face_landmarks:
-
+				faceXY = []
+				image_points = np.empty((0, 2), int)
 				f_arr, ip_arr = getImagePoints(face_landmarks, iw, ih)
 
 				faceXY.append(f_arr)		
 				image_points = np.append(image_points, ip_arr, axis=0)
-				#print(image_points)
+				
 				for i in image_points:
 					cv.circle(annotated_image,(int(i[0]),int(i[1])),2,(255,0,0),-1)
 					
@@ -287,13 +323,35 @@ def decode_mediapipe(source, frame, results, face_count, drawing_spec):
 				## calculate, whether a person looks to the left(right) side or looks in straight direction
 				lpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[4][0], image_points[4][1]), False)
 				rpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[5][0], image_points[5][1]), False)
-
-				p1, p2, dist = noseVector(faceXY, image_points, frame.shape)
+				
+				# nose vector 2d representation
+				p1, p2, dist, nose_end_point2D = noseVector(faceXY, image_points, frame.shape)
 				cv.line(annotated_image, p1, p2, (255, 0, 0), 1)
 
+				noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
 
-				#print(image_points)
+				# calculate and drwa hand positions
+				hand_landmarks = detect_hands(annotated_image)
+				str_hands=''
+				is_below=False
+				
+				if hand_landmarks is not None:
+					for hand_landmark in hand_landmarks:
+						mp_drawing.draw_landmarks(annotated_image, hand_landmark, mp_hands.HAND_CONNECTIONS)
+				
+				
+				mp_drawing.draw_landmarks(
+					image=annotated_image,
+					landmark_list=face_landmarks,
+					connections=mp_face_mesh.FACEMESH_CONTOURS,
+					landmark_drawing_spec=None,
+					connection_drawing_spec=mp_drawing_styles
+					.get_default_face_mesh_contours_style()
+				)
+				
 				face_count += 1
+				faceXY = None
+				image_points = None
 				
 				#mp.solutions.drawing_utils.draw_landmarks(
 				#	image=frame,
