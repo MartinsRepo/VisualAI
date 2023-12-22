@@ -383,7 +383,82 @@ def create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_in
 		drowsy = True
 	
 	
-	return facedir_horiz, facedir_vert, drowsy
+	return facedir_horiz, facedir_vert, drowsy, distracted
+
+
+def scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert):
+	scenery = ''
+	if drowsy:
+		if facedir_horiz==0:
+			if facedir_vert == 0:
+				scenery = "Person drowsy, face turned into straight direction, looking forward. "+str_hands
+			elif facedir_vert == -1:
+				scenery = "Person drowsy, face turned into straight direction, looking downward. "+str_hands
+			elif facedir_vert == 1:
+				scenery = "Person drowsy, face turned into straight direction, looking upward. "+str_hands
+			elif facedir_vert == 99:
+				scenery = "Person drowsy and looking in straight direction, vertical pose not detectable. "+str_hands
+		elif facedir_horiz==-1:
+			if facedir_vert == 0:
+				scenery = "Person drowsy, face turned into left direction, looking forward. "+str_hands
+			elif facedir_vert == -1:
+				scenery = "Person drowsy, face turned into left direction, looking downward. "+str_hands
+			elif facedir_vert == 1:
+				scenery = "Person drowsy, face turned into left direction, looking upward. "+str_hands
+			elif facedir_vert == 99:
+				scenery = "Person drowsy, face turned into left direction, vertical pose not detectable. "+str_hands
+		elif facedir_horiz==1:
+			if facedir_vert == 0:
+				scenery = "Person drowsy, face turned into right direction, looking forward. "+str_hands
+			elif facedir_vert == -1:
+				scenery = "Person drowsy, face turned into right direction, looking downward. "+str_hands
+			elif facedir_vert == 1:
+				scenery = "Person drowsy, face turned into right direction, looking upward. "+str_hands
+			elif facedir_vert == 99:
+				scenery = "Person drowsy and looking in right direction, vertical pose not detectable. "+str_hands
+		elif facedir_horiz==99:
+			scenery = "Person drowsy and direction not detectable. "+str_hands
+	
+	elif distracted:
+		if facedir_horiz==0:
+			scenery = "Person distracted, face turned into straight direction, looking downward. "+str_hands
+		elif facedir_horiz==-1:
+			scenery = "Person distracted, face turned into left direction, looking downward. "+str_hands
+		elif facedir_horiz==1:
+			scenery = "Person distracted, face turned into right direction, looking downward. "+str_hands
+	
+	else:
+		if facedir_horiz==0:
+			if facedir_vert == 0:
+				scenery = "Person awake, face turned into straight direction, looking forward. "+str_hands
+			elif facedir_vert == -1:
+				scenery = "Person awake, face turned into straight direction, looking downward. "+str_hands
+			elif facedir_vert == 1:
+				scenery = "Person awake, face turned into straight direction, looking upward. "+str_hands
+			elif facedir_vert == 99:
+				scenery = "Person awake, face turned into straight direction, vertical pose not detectable. "+str_hands
+		elif facedir_horiz==-1:
+			if facedir_vert == 0:
+				scenery = "Person awake, face turned into left direction, looking forward. "+str_hands
+			elif facedir_vert == -1:
+				scenery = "Person awake, face turned into left direction, looking downward. "+str_hands
+			elif facedir_vert == 1:
+				scenery = "Person awake, face turned into left direction, looking upward. "+str_hands
+			elif facedir_vert == 99:
+				scenery = "Person awake, face turned into left direction, vertical pose not detectable. "+str_hands
+		elif facedir_horiz==1:
+			if facedir_vert == 0:
+				scenery = "Person awake, face turned into right direction, looking forward. "+str_hands
+			elif facedir_vert == -1:
+				scenery = "Person awake, face turned into right direction, looking downward. "+str_hands
+			elif facedir_vert == 1:
+				scenery = "Person awake, face turned into right direction, looking upward. "+str_hands
+			elif facedir_vert == 99:
+				scenery = "Person awake, face turned into right direction, vertical pose not detectable. "+str_hands
+		elif facedir_horiz==99:
+			scenery = "Person awake and direction not detectable. "+str_hands
+	
+	return scenery
 
 
 def decode_mediapipe(source, frame, results, face_count, drawing_spec):
@@ -435,7 +510,7 @@ def decode_mediapipe(source, frame, results, face_count, drawing_spec):
 
 				noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
 
-				# calculate and drwa hand positions
+				# calculate and draw hand positions
 				hand_landmarks = detect_hands(annotated_image)
 				
 				str_hands =''
@@ -445,8 +520,12 @@ def decode_mediapipe(source, frame, results, face_count, drawing_spec):
 					str_hands = scenery_handdetection(ih, iw, hand_landmarks)
 				
 				
-				facedir_horiz, facedir_vert, drowsy = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark)
+				# get scenery markers
+				facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark)
 				
+				# describe the scenery by text
+				scenery = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
+				print('Detected Scenery: ', scenery)
 				
 				mp_drawing.draw_landmarks(
 					image=annotated_image,
