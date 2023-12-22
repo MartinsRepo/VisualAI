@@ -297,7 +297,7 @@ def noseVector(faceXY, image_points, size):
 	p1 = (int(image_points[0][0]), int(image_points[0][1]))
 	p2 = (int(nose_end_point2D[0][0][0]), int(nose_end_point2D[0][0][1]))
 
-	return p1, p2, distance, nose_end_point2D
+	return p1, p2, distance, nose_end_point2D, rotation_vector 
 
 
 def scenery_handdetection(height, width, hand_landmarks):
@@ -315,6 +315,75 @@ def scenery_handdetection(height, width, hand_landmarks):
 	    str_hands="Hands near the face."
 
 	return str_hands
+
+
+def create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark):
+	
+	lme=False	# left mouth endpoint
+	rme=False	# right mouth endpoint
+	
+	# head position
+	if lpoint_inside_oval >= 0:
+		lme = True
+	else:
+	   	lme = False
+	rme = True
+	if rpoint_inside_oval >= 0:
+		rme = True
+	else:
+		rme = False
+		
+	# face position left-straight-right
+	facedir_horiz = 99
+	if lme and rme:
+		facedir_horiz = 0  # straight
+	elif lme and not rme:
+		facedir_horiz = -1 # left
+	elif not lme and rme:
+		facedir_horiz = 1  # right
+	
+	# face position up-straight-down
+	facedir_vert = 99
+	
+	# detect vertical position
+	if facedir_horiz == 0:
+		if is_between(-90, noseDirAng[0], 0) and is_between(-3.5, rotation_vector[0], -2.5) and is_between(-0.25, rotation_vector[1], 0.25):
+			facedir_vert = 0
+		elif is_between(-10, noseDirAng[0], 10) and  is_between(-2.49, rotation_vector[0], 0):
+			facedir_vert= -1
+		elif is_between(-180, noseDirAng[0], -160) and is_between(-0.6, rotation_vector[1], 0):
+			facedir_vert = 1
+
+	elif facedir_horiz == -1:
+		if is_between(60, noseDirAng[0], 170) :
+			if is_between(-0.6, rotation_vector[0], 0.6):
+				facedir_vert = 0
+			elif rotation_vector[0]<0.6 or rotation_vector[0]>0.6 and tilt>=2:
+				facedir_vert = 1	
+		elif is_between(0, noseDirAng[0], 59) and tilt < -2:
+			facedir_vert = -1	
+	elif facedir_horiz == 1:
+		if is_between(-170, noseDirAng[0], -60) :
+			if noseDirAng[0] >- 120 and is_between(-2.5, tilt, 2.5):
+				facedir_vert = 0
+			elif is_between(-0.8, rotation_vector[0], -0.2):
+					facedir_vert = 1
+		elif is_between(-59, noseDirAng[0], 0) and tilt>3:
+			facedir_vert = -1
+	
+	# Calculate eye vertikal distances
+	rdelta = rmark[3] - rmark[2]
+	ldelta = lmark[3] - lmark[2]
+	drowsy = False
+	distracted = False
+	
+	if facedir_vert == -1 and is_below:
+		distracted = True
+	elif rdelta < 0.03 and ldelta < 0.03 and aspect_ratio_indicator:
+		drowsy = True
+	
+	
+	return facedir_horiz, facedir_vert, drowsy
 
 
 def decode_mediapipe(source, frame, results, face_count, drawing_spec):
@@ -361,7 +430,7 @@ def decode_mediapipe(source, frame, results, face_count, drawing_spec):
 				rpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[5][0], image_points[5][1]), False)
 				
 				# nose vector 2d representation
-				p1, p2, dist, nose_end_point2D = noseVector(faceXY, image_points, frame.shape)
+				p1, p2, dist, nose_end_point2D, rotation_vector = noseVector(faceXY, image_points, frame.shape)
 				cv.line(annotated_image, p1, p2, (255, 0, 0), 1)
 
 				noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
@@ -376,7 +445,7 @@ def decode_mediapipe(source, frame, results, face_count, drawing_spec):
 					str_hands = scenery_handdetection(ih, iw, hand_landmarks)
 				
 				
-				
+				facedir_horiz, facedir_vert, drowsy = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark)
 				
 				
 				mp_drawing.draw_landmarks(
