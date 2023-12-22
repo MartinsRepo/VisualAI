@@ -12,8 +12,24 @@ import analysis
 DEMO_IMAGE = 'demo/demo.jpg'
 DEMO_VIDEO = 'demo/demo.mp4'
 
+# columns in the main window
+#left_column, right_column = st.columns([3, 1])
+
+st.set_page_config(layout="wide")
+leftCol, empty1, rightCol = st.columns([8,1,4]) # headline
+#secondRow, empty3, debugfield = st.columns([8,1,3]) #just to highlight these are different cols
+
+#container = st.container(border=True)
+#container.write("This is inside the container")
+
 # Basic App Scaffolding
-st.title('Face Detection with Mediapipe')
+#with left_column:
+with leftCol:
+	st.title('Face Detection with Mediapipe')
+	
+#with debugfield:
+#	# Display the results in a text field
+#	debugfield.text_area("Results", value="Detected Scenery: Person drowsy and looking in straight direction, vertical pose not detectable.", height=300)
 
 ## Add Sidebar and Main Window style
 st.markdown(
@@ -138,7 +154,9 @@ def main():
 		st.sidebar.markdown('---')
 
 		## Output
-		st.markdown('## Output Image')
+		with leftCol:
+			st.markdown('## Output Image')
+			
 		img_file_buffer = st.sidebar.file_uploader("Upload an Image", type=["jpg","jpeg","png"])
 		
 		if img_file_buffer is not None:
@@ -165,10 +183,11 @@ def main():
 			results = face_mesh.process(image)
 			out_image=image.copy()
 
-			face_count = analysis.decode_mediapipe('image', out_image, results, face_count, None)
-			
-			#kpil1_text.write(f"<h1 style='text-align: center; color:red;'>{face_count}</h1>", unsafe_allow_html=True)
-			disp_res('image', kpil1_text, None, face_count, None)
+			face_count, result_dict = analysis.decode_mediapipe('image', out_image, results, face_count, None, leftCol, rightCol)
+			print(result_dict)
+			with rightCol:
+				st.text_area("Detected Number of Faces:", value=str(face_count), height=50)
+				st.text_area("Debug Window:", value=str(face_count), height=50)
 
 	# Video Page
 

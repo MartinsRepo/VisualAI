@@ -38,6 +38,7 @@ drowsy_threshold = 150  # Adjust as needed
 distracted_threshold = 15  # Adjust as needed
 
 
+
 # Helper functions
 def x_element(elem):
 	return elem[0]
@@ -288,7 +289,7 @@ def noseVector(faceXY, image_points, size):
 		[0, focal_length, center[1]],
 		[0, 0, 1]], dtype="double"
 	) 
-	print(distance)
+	
 	(success, rotation_vector, translation_vector) = cv.solvePnP(face3Dmodel, image_points,  camera_matrix, dist_coeffs)
 	
 	(nose_end_point2D, jacobian) = cv.projectPoints(np.array([(0.0, 0.0, 1000.0)]), rotation_vector, translation_vector, camera_matrix, dist_coeffs)
@@ -317,7 +318,7 @@ def scenery_handdetection(height, width, hand_landmarks):
 	return str_hands
 
 
-def create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark):
+def create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt):
 	
 	lme=False	# left mouth endpoint
 	rme=False	# right mouth endpoint
@@ -461,12 +462,15 @@ def scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_v
 	return scenery
 
 
-def decode_mediapipe(source, frame, results, face_count, drawing_spec):
+def decode_mediapipe(source, frame, results, face_count, drawing_spec, leftCol, rightCol):
 	
 	dist=[]
 	
 	ih, iw, _ = frame.shape
 	
+	result_dict = {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] };
+
+	#my_dict["Name"].append("Guru")
 	
 	if results.multi_face_landmarks:
 		if source == 'image':	
@@ -521,11 +525,10 @@ def decode_mediapipe(source, frame, results, face_count, drawing_spec):
 				
 				
 				# get scenery markers
-				facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark)
+				facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt)
 				
 				# describe the scenery by text
 				scenery = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
-				print('Detected Scenery: ', scenery)
 				
 				mp_drawing.draw_landmarks(
 					image=annotated_image,
@@ -539,15 +542,30 @@ def decode_mediapipe(source, frame, results, face_count, drawing_spec):
 				face_count += 1
 				faceXY = None
 				image_points = None
-				
-				#mp.solutions.drawing_utils.draw_landmarks(
-				#	image=frame,
-				#	landmark_list=face_landmarks,
-				#	connections=mp.solutions.face_mesh.FACEMESH_CONTOURS,
-				#	landmark_drawing_spec=drawing_spec
-				#)
 
-			st.image(annotated_image, use_column_width=True)
+			# for display purpose collect results
+			result_dict["FacedirH"].append(str(facedir_horiz))
+			result_dict["FacedirV"].append(str(facedir_vert))
+			result_dict["Drowsy"].append(str(drowsy))
+			result_dict["Distracted"].append(str(distracted))
+			result_dict["RotMatrix"].append(str(rotation_vector))
+			result_dict["Tilt"].append(str(tilt))
+			result_dict["NoseVec"].append(str(noseDirAng))
+			
+			with leftCol:
+				st.image(annotated_image, use_column_width=True)
+			
+			with rightCol:
+				st.markdown("""
+						<style>
+							.spacer {
+								margin-top: 200px;  /* Adjust the size as needed */
+							}
+						</style>
+						<div class="spacer"></div>
+					""", unsafe_allow_html=True)
+				
+				st.text_area("Detected Scenery", value=scenery, height=150)
 			
 		elif source == 'video':
 
@@ -563,4 +581,4 @@ def decode_mediapipe(source, frame, results, face_count, drawing_spec):
 				connection_drawing_spec=drawing_spec
 			)
 			
-	return face_count
+	return face_count, result_dict
