@@ -3,6 +3,9 @@ import streamlit as st
 import numpy as np
 import cv2 as cv
 import math
+from PIL import Image
+from io import BytesIO
+import base64
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -462,123 +465,236 @@ def scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_v
 	return scenery
 
 
-def decode_mediapipe(source, frame, results, face_count, drawing_spec, leftCol, rightCol):
-	
+# Resize Images to fit Container
+@st.cache_data ()
+# Get Image Dimensions
+def image_resize(image, width=None, height=None, inter=cv.INTER_AREA):
+    # initialize the dimensions of the image to be resized and
+    dim = None
+    # grab the image size
+    (h,w) = image.shape[:2]
+
+    if width is None and height is None:
+        return image
+    # calculate the ratio of the height and construct the
+    # dimensions
+    if width is None:
+        r = width/float(w)
+        dim = (int(w*r),height)
+    else:
+        r = width/float(w)
+        dim = width, int(h*r)
+
+    # Resize image
+    resized = cv.resize(image,dim,interpolation=inter)
+
+    return resized
+
+
+def decode_image_mediapipe(frame, results, face_count, drawing_spec, left_placeholder, right_placeholder):
 	dist=[]
 	
 	ih, iw, _ = frame.shape
 	
 	result_dict = {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] };
 
-	#my_dict["Name"].append("Guru")
 	
 	if results.multi_face_landmarks:
-		if source == 'image':	
-			
-			#Face Landmark Drawing
-			annotated_image = frame.copy()
-			
-			for face_landmarks in results.multi_face_landmarks:
-				faceXY = []
-				image_points = np.empty((0, 2), int)
-				f_arr, ip_arr = getImagePoints(face_landmarks, iw, ih)
-
-				faceXY.append(f_arr)		
-				image_points = np.append(image_points, ip_arr, axis=0)
-				
-				for i in image_points:
-					cv.circle(annotated_image,(int(i[0]),int(i[1])),2,(255,0,0),-1)
-					
-				# Eye and face oval extraction
-				rmark, lmark, tilt, faceoval_coords, aspect_ratio_indicator = faceProfileExtractor('image', face_landmarks)
-				
-				# calculating face oval
-				fmark = faceSquareExtractor(faceoval_coords)
-				cv.circle(annotated_image,(int(fmark[0]*iw),int(fmark[1]*ih)),2,(255,100,0),-1)
-				cv.circle(annotated_image,(int(fmark[2]*iw),int(fmark[3]*ih)),2,(255,100,0),-1)
-				
-				# draw face oval
-				ovalcoords = extractCoordsFromDict(faceoval_coords,iw,ih)
 		
-				# verify oval coordinates
-				pts = np.array(ovalcoords,np.int32)
-				cv.polylines(annotated_image, [pts], True, (255,100,100), 1)
-				
-				## calculate, whether a person looks to the left(right) side or looks in straight direction
-				lpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[4][0], image_points[4][1]), False)
-				rpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[5][0], image_points[5][1]), False)
-				
-				# nose vector 2d representation
-				p1, p2, dist, nose_end_point2D, rotation_vector = noseVector(faceXY, image_points, frame.shape)
-				cv.line(annotated_image, p1, p2, (255, 0, 0), 1)
+		#Face Landmark Drawing
+		annotated_image = frame.copy()
+		
+		for face_landmarks in results.multi_face_landmarks:
+			faceXY = []
+			image_points = np.empty((0, 2), int)
+			f_arr, ip_arr = getImagePoints(face_landmarks, iw, ih)
 
-				noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
-
-				# calculate and draw hand positions
-				hand_landmarks = detect_hands(annotated_image)
-				
-				str_hands =''
-				if hand_landmarks is not None:
-					for hand_landmark in hand_landmarks:
-						mp_drawing.draw_landmarks(annotated_image, hand_landmark, mp_hands.HAND_CONNECTIONS)
-					str_hands = scenery_handdetection(ih, iw, hand_landmarks)
-				
-				
-				# get scenery markers
-				facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt)
-				
-				# describe the scenery by text
-				scenery = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
-				
-				mp_drawing.draw_landmarks(
-					image=annotated_image,
-					landmark_list=face_landmarks,
-					connections=mp_face_mesh.FACEMESH_CONTOURS,
-					landmark_drawing_spec=None,
-					connection_drawing_spec=mp_drawing_styles
-					.get_default_face_mesh_contours_style()
-				)
-				
-				face_count += 1
-				faceXY = None
-				image_points = None
-
-			# for display purpose collect results
-			result_dict["FacedirH"].append(str(facedir_horiz))
-			result_dict["FacedirV"].append(str(facedir_vert))
-			result_dict["Drowsy"].append(str(drowsy))
-			result_dict["Distracted"].append(str(distracted))
-			result_dict["RotMatrix"].append(str(rotation_vector))
-			result_dict["Tilt"].append(str(tilt))
-			result_dict["NoseVec"].append(str(noseDirAng))
+			faceXY.append(f_arr)		
+			image_points = np.append(image_points, ip_arr, axis=0)
 			
-			with leftCol:
-				st.image(annotated_image, use_column_width=True)
-			
-			with rightCol:
-				st.markdown("""
-						<style>
-							.spacer {
-								margin-top: 200px;  /* Adjust the size as needed */
-							}
-						</style>
-						<div class="spacer"></div>
-					""", unsafe_allow_html=True)
+			for i in image_points:
+				cv.circle(annotated_image,(int(i[0]),int(i[1])),2,(255,0,0),-1)
 				
-				st.text_area("Detected Scenery", value=scenery, height=150)
+			# Eye and face oval extraction
+			rmark, lmark, tilt, faceoval_coords, aspect_ratio_indicator = faceProfileExtractor('image', face_landmarks)
 			
-		elif source == 'video':
-
-			#Face Landmark Drawing
-			for face_landmarks in results.multi_face_landmarks:
-				face_count += 1
-
-			mp.solutions.drawing_utils.draw_landmarks(
-				image=frame,
-				landmark_list=face_landmarks,
-				connections=mp.solutions.face_mesh.FACEMESH_CONTOURS,
-				landmark_drawing_spec=drawing_spec,
-				connection_drawing_spec=drawing_spec
-			)
+			# calculating face oval
+			fmark = faceSquareExtractor(faceoval_coords)
+			cv.circle(annotated_image,(int(fmark[0]*iw),int(fmark[1]*ih)),2,(255,100,0),-1)
+			cv.circle(annotated_image,(int(fmark[2]*iw),int(fmark[3]*ih)),2,(255,100,0),-1)
 			
+			# draw face oval
+			ovalcoords = extractCoordsFromDict(faceoval_coords,iw,ih)
+	
+			# verify oval coordinates
+			pts = np.array(ovalcoords,np.int32)
+			cv.polylines(annotated_image, [pts], True, (255,100,100), 1)
+			
+			## calculate, whether a person looks to the left(right) side or looks in straight direction
+			lpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[4][0], image_points[4][1]), False)
+			rpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[5][0], image_points[5][1]), False)
+			
+			# nose vector 2d representation
+			p1, p2, dist, nose_end_point2D, rotation_vector = noseVector(faceXY, image_points, frame.shape)
+			cv.line(annotated_image, p1, p2, (255, 0, 0), 1)
+
+			noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
+
+			# calculate and draw hand positions
+			hand_landmarks = detect_hands(annotated_image)
+			
+			str_hands =''
+			if hand_landmarks is not None:
+				for hand_landmark in hand_landmarks:
+					mp_drawing.draw_landmarks(annotated_image, hand_landmark, mp_hands.HAND_CONNECTIONS)
+				str_hands = scenery_handdetection(ih, iw, hand_landmarks)
+			
+			
+			# get scenery markers
+			facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt)
+			
+			# describe the scenery by text
+			scenery = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
+			
+			face_count += 1
+			faceXY = None
+			image_points = None
+
+		# for display purpose collect results
+		result_dict["FacedirH"].append(str(facedir_horiz))
+		result_dict["FacedirV"].append(str(facedir_vert))
+		result_dict["Drowsy"].append(str(drowsy))
+		result_dict["Distracted"].append(str(distracted))
+		result_dict["RotMatrix"].append(str(rotation_vector))
+		result_dict["Tilt"].append(str(tilt))
+		result_dict["NoseVec"].append(str(noseDirAng))
+		
+		with  left_placeholder:
+			st.image(annotated_image, use_column_width=True)
+	
+		with  right_placeholder:
+			st.markdown("""
+					<style>
+						.spacer {
+							margin-top: 200px;  /* Adjust the size as needed */
+						}
+					</style>
+					<div class="spacer"></div>
+				""", unsafe_allow_html=True)
+			
+			st.text_area("Detected Scenery", value=scenery, height=150)
+	
+		
+	return face_count, result_dict
+	
+
+def decode_video_mediapipe(video, results, face_count, drawing_spec, max_faces, detection_confidence, tracking_confidence, left_placeholder, right_placeholder,video_frame_placeholder):
+	
+	result_dict = {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] };
+		
+	with mp.solutions.face_mesh.FaceMesh(
+		max_num_faces=max_faces,
+		min_detection_confidence=detection_confidence,
+		min_tracking_confidence=tracking_confidence
+
+	) as face_mesh:
+		prevTime = 0
+		i = 0
+		
+		while video.isOpened():
+			
+			i +=1
+			ret, frame = video.read()
+			if not ret:
+				break
+				
+			 # Convert the frame to RGB (OpenCV uses BGR by default)
+			frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+			
+			results = face_mesh.process(frame)
+			
+			ih, iw, _ = frame.shape
+			
+			if results.multi_face_landmarks:
+				for face_landmarks in results.multi_face_landmarks:
+					faceXY = []
+					image_points = np.empty((0, 2), int)
+					f_arr, ip_arr = getImagePoints(face_landmarks, iw, ih)
+
+					faceXY.append(f_arr)		
+					image_points = np.append(image_points, ip_arr, axis=0)
+					
+					for i in image_points:
+						cv.circle(frame,(int(i[0]),int(i[1])),3,(255,0,0),-1)
+						
+					# Eye and face oval extraction
+					rmark, lmark, tilt, faceoval_coords, aspect_ratio_indicator = faceProfileExtractor('image', face_landmarks)
+			
+					# calculating face oval
+					fmark = faceSquareExtractor(faceoval_coords)
+					cv.circle(frame,(int(fmark[0]*iw),int(fmark[1]*ih)),2,(255,100,0),-1)
+					cv.circle(frame,(int(fmark[2]*iw),int(fmark[3]*ih)),2,(255,100,0),-1)
+				
+					
+					# draw face oval
+					ovalcoords = extractCoordsFromDict(faceoval_coords,iw,ih)
+			
+					# verify oval coordinates
+					pts = np.array(ovalcoords,np.int32)
+					cv.polylines(frame, [pts], True, (255,100,100), 2)
+				
+					## calculate, whether a person looks to the left(right) side or looks in straight direction
+					lpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[4][0], image_points[4][1]), False)
+					rpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[5][0], image_points[5][1]), False)
+					
+					# nose vector 2d representation
+					p1, p2, dist, nose_end_point2D, rotation_vector = noseVector(faceXY, image_points, frame.shape)
+					cv.line(frame, p1, p2, (8, 112, 7), 3)
+
+					noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
+
+					# calculate and draw hand positions
+					hand_landmarks = detect_hands(frame)
+					
+					str_hands =''
+					if hand_landmarks is not None:
+						for hand_landmark in hand_landmarks:
+							mp_drawing.draw_landmarks(frame, hand_landmark, mp_hands.HAND_CONNECTIONS)
+						str_hands = scenery_handdetection(ih, iw, hand_landmarks)
+				
+					# get scenery markers
+					facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt)
+					
+					# describe the scenery by text
+					scenery = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
+					
+					face_count += 1
+					faceXY = None
+					image_points = None
+				
+				# for display purpose collect results
+				result_dict["FacedirH"].append(str(facedir_horiz))
+				result_dict["FacedirV"].append(str(facedir_vert))
+				result_dict["Drowsy"].append(str(drowsy))
+				result_dict["Distracted"].append(str(distracted))
+				result_dict["RotMatrix"].append(str(rotation_vector))
+				result_dict["Tilt"].append(str(tilt))
+				result_dict["NoseVec"].append(str(noseDirAng))
+				
+				#print(result_dict)
+				
+				# Convert the frame to a PIL Image
+				image = Image.fromarray(frame)
+
+				# Save the PIL image to a BytesIO object
+				buffered_image = BytesIO()
+				image.save(buffered_image, format='JPEG')
+				buffered_image.seek(0)
+
+				# Display the image in the Streamlit app
+				with left_placeholder:
+					video_frame_placeholder.image(buffered_image, channels='RGB')
+				
+
+	
 	return face_count, result_dict

@@ -12,24 +12,11 @@ import analysis
 DEMO_IMAGE = 'demo/demo.jpg'
 DEMO_VIDEO = 'demo/demo.mp4'
 
-# columns in the main window
-#left_column, right_column = st.columns([3, 1])
-
 st.set_page_config(layout="wide")
-leftCol, empty1, rightCol = st.columns([8,1,4]) # headline
-#secondRow, empty3, debugfield = st.columns([8,1,3]) #just to highlight these are different cols
-
-#container = st.container(border=True)
-#container.write("This is inside the container")
-
-# Basic App Scaffolding
-#with left_column:
-with leftCol:
+left_placeholder, empty_placeholder, right_placeholder = st.columns([8, 1, 4])
+video_frame_placeholder = st.empty()
+with left_placeholder:
 	st.title('Face Detection with Mediapipe')
-	
-#with debugfield:
-#	# Display the results in a text field
-#	debugfield.text_area("Results", value="Detected Scenery: Person drowsy and looking in straight direction, vertical pose not detectable.", height=300)
 
 ## Add Sidebar and Main Window style
 st.markdown(
@@ -57,33 +44,6 @@ app_mode = st.sidebar.selectbox(
     ['Image','Video','About']
 )
 
-# Resize Images to fit Container
-@st.cache_data ()
-# Get Image Dimensions
-def image_resize(image, width=None, height=None, inter=cv.INTER_AREA):
-    # initialize the dimensions of the image to be resized and
-    dim = None
-    # grab the image size
-    (h,w) = image.shape[:2]
-
-    if width is None and height is None:
-        return image
-    # calculate the ratio of the height and construct the
-    # dimensions
-    if width is None:
-        r = width/float(w)
-        dim = (int(w*r),height)
-    # calculate the ratio of the width and construct the
-    # dimensions
-    else:
-        r = width/float(w)
-        dim = width, int(h*r)
-
-    # Resize image
-    resized = cv.resize(image,dim,interpolation=inter)
-
-    return resized
-
 
 def disp_res(source, kpil1_text, kpil2_text, face_count, fps):
 	if source == 'image':
@@ -93,8 +53,9 @@ def disp_res(source, kpil1_text, kpil2_text, face_count, fps):
 		kpil2_text.write(f"<h1 style='text-align: center; color:red;'>{face_count}</h1>", unsafe_allow_html=True)
 
 
-
 def main():
+
+
 	# About Page
 	if app_mode == 'About':
 		st.markdown('''
@@ -122,8 +83,9 @@ def main():
 		)
 
 	# Image Page
-
 	elif app_mode == 'Image':
+		left_placeholder, empty_placeholder, right_placeholder = st.columns([8, 1, 4])	
+		
 		drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
 
 		st.sidebar.markdown('---')
@@ -154,7 +116,7 @@ def main():
 		st.sidebar.markdown('---')
 
 		## Output
-		with leftCol:
+		with left_placeholder:
 			st.markdown('## Output Image')
 			
 		img_file_buffer = st.sidebar.file_uploader("Upload an Image", type=["jpg","jpeg","png"])
@@ -183,17 +145,18 @@ def main():
 			results = face_mesh.process(image)
 			out_image=image.copy()
 
-			face_count, result_dict = analysis.decode_mediapipe('image', out_image, results, face_count, None, leftCol, rightCol)
+			face_count, result_dict = analysis.decode_image_mediapipe( out_image, results, face_count,  drawing_spec, left_placeholder, right_placeholder)
 			print(result_dict)
-			with rightCol:
+			
+			with right_placeholder:
 				st.text_area("Detected Number of Faces:", value=str(face_count), height=50)
 				st.text_area("Debug Window:", value=str(face_count), height=50)
-
+		
 	# Video Page
-
 	elif app_mode == 'Video':
 
-
+		left_placeholder, empty_placeholder, right_placeholder = st.columns([8, 1, 4])
+		
 		use_webcam = st.sidebar.button('Use Webcam')
 		record = st.sidebar.checkbox("Record Video")
 
@@ -227,7 +190,7 @@ def main():
 		st.sidebar.markdown('---')
 
 		## Get Video
-		stframe = st.empty()
+		leftCol, empty1, rightCol = st.columns([8,1,4]) 
 		video_file_buffer = st.sidebar.file_uploader("Upload a Video", type=['mp4', 'mov', 'avi', 'asf', 'm4v'])
 		temp_file = tempfile.NamedTemporaryFile(delete=False)
 
@@ -258,60 +221,21 @@ def main():
 
 		drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
 
-		kpil1, kpil2, kpil3 = st.columns(3)
+		#kpil1, kpil2, kpil3 = st.columns(3)
 
-		with kpil1:
-			st.markdown('**Frame Rate**')
-			kpil1_text = st.markdown('0')
+		#with kpil1:
+		#	st.markdown('**Frame Rate**')
+		#	kpil1_text = st.markdown('0')
 
-		with kpil2:
-			st.markdown('**Detected Faces**')
-			kpil2_text = st.markdown('0')
+		#with kpil2:
+		#	st.markdown('**Detected Faces**')
+		#	kpil2_text = st.markdown('0')
 
-		st.markdown('<hr/>', unsafe_allow_html=True)
+		#st.markdown('<hr/>', unsafe_allow_html=True)
+		
+		
+		face_count, result_dict = analysis.decode_video_mediapipe(video, None, 0, drawing_spec, max_faces, detection_confidence, tracking_confidence, left_placeholder, right_placeholder, video_frame_placeholder)
 
-
-		## Face Mesh
-		with mp.solutions.face_mesh.FaceMesh(
-			max_num_faces=max_faces,
-			min_detection_confidence=detection_confidence,
-			min_tracking_confidence=tracking_confidence
-
-		) as face_mesh:
-
-			prevTime = 0
-
-			while video.isOpened():
-				i +=1
-				ret, frame = video.read()
-				if not ret:
-					continue
-
-				results = face_mesh.process(frame)
-				frame.flags.writeable = True
-
-				face_count = 0
-
-				face_count = analysis.decode_mediapipe('video', frame, results, face_count, drawing_spec)
-
-
-				# FPS Counter
-				currTime = time.time()
-				fps = 1/(currTime - prevTime)
-				prevTime = currTime
-
-				if record:
-					out.write(frame)
-
-		        	# Dashboard
-				#kpil1_text.write(f"<h1 style='text-align: center; color:red;'>{int(fps)}</h1>", unsafe_allow_html=True)
-				#kpil2_text.write(f"<h1 style='text-align: center; color:red;'>{face_count}</h1>", unsafe_allow_html=True)
-				disp_res('video', kpil1_text, kpil2_text, face_count, fps)
-
-
-				frame = cv.resize(frame,(0,0), fx=0.8, fy=0.8)
-				frame = image_resize(image=frame, width=640)
-				stframe.image(frame,channels='BGR', use_column_width=True)
 
                 
 if __name__ == "__main__":
