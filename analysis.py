@@ -6,6 +6,7 @@ import math
 from PIL import Image
 from io import BytesIO
 import base64
+import gc
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -318,10 +319,10 @@ def scenery_handdetection(height, width, hand_landmarks):
 	else:
 	    str_hands="Hands near the face."
 
-	return str_hands
+	return str_hands, is_below
 
 
-def create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt):
+def create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below):
 	
 	lme=False	# left mouth endpoint
 	rme=False	# right mouth endpoint
@@ -489,20 +490,19 @@ def image_resize(image, width=None, height=None, inter=cv.INTER_AREA):
     resized = cv.resize(image,dim,interpolation=inter)
 
     return resized
+    
 
-
-def decode_image_mediapipe(frame, results, face_count, drawing_spec, left_placeholder, right_placeholder):
+def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_placeholder):
 	dist=[]
 	
-	ih, iw, _ = frame.shape
-	
 	result_dict = {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] };
-
+	drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
 	
 	if results.multi_face_landmarks:
 		
 		#Face Landmark Drawing
-		annotated_image = frame.copy()
+		annotated_image = image_resize(frame, width=313, height=438)
+		ih, iw, _ = annotated_image.shape
 		
 		for face_landmarks in results.multi_face_landmarks:
 			faceXY = []
@@ -528,7 +528,7 @@ def decode_image_mediapipe(frame, results, face_count, drawing_spec, left_placeh
 	
 			# verify oval coordinates
 			pts = np.array(ovalcoords,np.int32)
-			cv.polylines(annotated_image, [pts], True, (255,100,100), 1)
+			cv.polylines(annotated_image, [pts], True, (255,100,100), 2)
 			
 			## calculate, whether a person looks to the left(right) side or looks in straight direction
 			lpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[4][0], image_points[4][1]), False)
@@ -536,7 +536,8 @@ def decode_image_mediapipe(frame, results, face_count, drawing_spec, left_placeh
 			
 			# nose vector 2d representation
 			p1, p2, dist, nose_end_point2D, rotation_vector = noseVector(faceXY, image_points, frame.shape)
-			cv.line(annotated_image, p1, p2, (255, 0, 0), 1)
+			#cv.line(annotated_image, p1, p2, (38, 128, 15), 2)
+			cv.line(annotated_image, p1, p2, (238, 255, 0), 3)
 
 			noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
 
@@ -544,14 +545,15 @@ def decode_image_mediapipe(frame, results, face_count, drawing_spec, left_placeh
 			hand_landmarks = detect_hands(annotated_image)
 			
 			str_hands =''
+			is_below = None
 			if hand_landmarks is not None:
 				for hand_landmark in hand_landmarks:
 					mp_drawing.draw_landmarks(annotated_image, hand_landmark, mp_hands.HAND_CONNECTIONS)
-				str_hands = scenery_handdetection(ih, iw, hand_landmarks)
+				str_hands, is_below = scenery_handdetection(ih, iw, hand_landmarks)
 			
 			
 			# get scenery markers
-			facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt)
+			facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below)
 			
 			# describe the scenery by text
 			scenery = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
@@ -569,28 +571,30 @@ def decode_image_mediapipe(frame, results, face_count, drawing_spec, left_placeh
 		result_dict["Tilt"].append(str(tilt))
 		result_dict["NoseVec"].append(str(noseDirAng))
 		
-		with  left_placeholder:
-			st.image(annotated_image, use_column_width=True)
-	
-		with  right_placeholder:
-			st.markdown("""
-					<style>
-						.spacer {
-							margin-top: 200px;  /* Adjust the size as needed */
-						}
-					</style>
-					<div class="spacer"></div>
-				""", unsafe_allow_html=True)
-			
-			st.text_area("Detected Scenery", value=scenery, height=150)
-	
-		
-	return face_count, result_dict
-	
+		left_placeholder.image(annotated_image, use_column_width=True)
 
-def decode_video_mediapipe(video, results, face_count, drawing_spec, max_faces, detection_confidence, tracking_confidence, left_placeholder, right_placeholder,video_frame_placeholder):
+		right_placeholder.markdown("""
+				<style>
+					.spacer {
+						margin-top: 100px;  /* Adjust the size as needed */
+					}
+				</style>
+				<div class="spacer"></div>
+			""", unsafe_allow_html=True)
+		
+		right_placeholder.text_area("Detected Scenery", value=scenery, height=100)
+		right_placeholder.text_area("Detected Number of Faces:", value=str(face_count), height=12)
+		right_placeholder.text_area("Debug Window:", value=str(result_dict), height=150)
+		
+		# cleanup
+		st.cache_data.clear()
+		st.cache_resource.clear()
+
+
+def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_confidence, left_placeholder, right_placeholder,video_frame_placeholder, video_text_placeholder):
 	
 	result_dict = {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] };
+	drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
 		
 	with mp.solutions.face_mesh.FaceMesh(
 		max_num_faces=max_faces,
@@ -599,18 +603,24 @@ def decode_video_mediapipe(video, results, face_count, drawing_spec, max_faces, 
 
 	) as face_mesh:
 		prevTime = 0
-		i = 0
+		#i = 0
+		key = 0
+		face_count = 0
 		
 		while video.isOpened():
 			
-			i +=1
-			ret, frame = video.read()
-			if not ret:
+			#i +=1
+			_, frame = video.read()
+
+			if frame is None:
+				#video.release()
 				break
 				
 			 # Convert the frame to RGB (OpenCV uses BGR by default)
 			frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-			
+			frame = image_resize(frame, width=640, height=480, inter=cv.INTER_AREA)
+
+		
 			results = face_mesh.process(frame)
 			
 			ih, iw, _ = frame.shape
@@ -649,7 +659,7 @@ def decode_video_mediapipe(video, results, face_count, drawing_spec, max_faces, 
 					
 					# nose vector 2d representation
 					p1, p2, dist, nose_end_point2D, rotation_vector = noseVector(faceXY, image_points, frame.shape)
-					cv.line(frame, p1, p2, (8, 112, 7), 3)
+					cv.line(frame, p1, p2, (238, 255, 0), 3)
 
 					noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
 
@@ -657,13 +667,14 @@ def decode_video_mediapipe(video, results, face_count, drawing_spec, max_faces, 
 					hand_landmarks = detect_hands(frame)
 					
 					str_hands =''
+					is_below = None
 					if hand_landmarks is not None:
 						for hand_landmark in hand_landmarks:
 							mp_drawing.draw_landmarks(frame, hand_landmark, mp_hands.HAND_CONNECTIONS)
-						str_hands = scenery_handdetection(ih, iw, hand_landmarks)
+						str_hands, is_below = scenery_handdetection(ih, iw, hand_landmarks)
 				
 					# get scenery markers
-					facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt)
+					facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below)
 					
 					# describe the scenery by text
 					scenery = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
@@ -692,9 +703,25 @@ def decode_video_mediapipe(video, results, face_count, drawing_spec, max_faces, 
 				buffered_image.seek(0)
 
 				# Display the image in the Streamlit app
-				with left_placeholder:
-					video_frame_placeholder.image(buffered_image, channels='RGB')
+				video_frame_placeholder.image(buffered_image, channels='RGB')
 				
+				video_text_placeholder.markdown("""
+						<style>
+							.spacer {
+								margin-top: 200px;  /* Adjust the size as needed */
+							}
+						</style>
+						<div class="spacer"></div>
+					""", unsafe_allow_html=True)
+				
+				mykey = "abc"+str(key)
+				video_text_placeholder.text_area("Detected Scenery", value=scenery, height=150, key=mykey)
+				key += 1
+				
+				# cleanup
+				st.cache_data.clear()
+				st.cache_resource.clear()
+				gc.collect()
+		video.release()
 
-	
-	return face_count, result_dict
+				

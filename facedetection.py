@@ -1,4 +1,5 @@
 import cv2
+import os
 import streamlit as st
 import mediapipe as mp
 import cv2 as cv
@@ -15,6 +16,7 @@ DEMO_VIDEO = 'demo/demo.mp4'
 st.set_page_config(layout="wide")
 left_placeholder, empty_placeholder, right_placeholder = st.columns([8, 1, 4])
 video_frame_placeholder = st.empty()
+video_text_placeholder = st.empty()
 with left_placeholder:
 	st.title('Face Detection with Mediapipe')
 
@@ -55,7 +57,6 @@ def disp_res(source, kpil1_text, kpil2_text, face_count, fps):
 
 def main():
 
-
 	# About Page
 	if app_mode == 'About':
 		st.markdown('''
@@ -84,9 +85,12 @@ def main():
 
 	# Image Page
 	elif app_mode == 'Image':
-		left_placeholder, empty_placeholder, right_placeholder = st.columns([8, 1, 4])	
+	
+		# cleanup
+		st.cache_data.clear()
+		st.cache_resource.clear()
 		
-		drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
+		left_placeholder, empty_placeholder, right_placeholder = st.columns([2, 1, 4])	
 
 		st.sidebar.markdown('---')
 
@@ -106,10 +110,10 @@ def main():
 			unsafe_allow_html=True,
 		)
 
-		st.markdown("**Detected Faces**")
-		kpil1_text = st.markdown('0')
+#		st.markdown("**Detected Faces**")
+#		kpil1_text = st.markdown('0')
 
-		max_faces = st.sidebar.number_input('Maximum Number of Faces', value=2, min_value=1)
+		max_faces = st.sidebar.number_input('Maximum Number of Faces', value=3, min_value=1)
 		st.sidebar.markdown('---')
 
 		detection_confidence = st.sidebar.slider('Min Detection Confidence', min_value=0.0,max_value=1.0,value=0.5)
@@ -145,25 +149,22 @@ def main():
 			results = face_mesh.process(image)
 			out_image=image.copy()
 
-			face_count, result_dict = analysis.decode_image_mediapipe( out_image, results, face_count,  drawing_spec, left_placeholder, right_placeholder)
-			print(result_dict)
-			
-			with right_placeholder:
-				st.text_area("Detected Number of Faces:", value=str(face_count), height=50)
-				st.text_area("Debug Window:", value=str(face_count), height=50)
+			analysis.decode_image_mediapipe( out_image, results, face_count, left_placeholder, right_placeholder)
 		
 	# Video Page
 	elif app_mode == 'Video':
-
-		left_placeholder, empty_placeholder, right_placeholder = st.columns([8, 1, 4])
+		
+		# cleanup
+		st.cache_data.clear()
+		st.cache_resource.clear()
+		
+		left_placeholder, empty_placeholder, right_placeholder = st.columns([4, 1, 4])
 		
 		use_webcam = st.sidebar.button('Use Webcam')
 		record = st.sidebar.checkbox("Record Video")
 
 		if record:
 			st.checkbox('Recording', True)
-
-		drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
 
 		st.sidebar.markdown('---')
 
@@ -191,7 +192,7 @@ def main():
 
 		## Get Video
 		leftCol, empty1, rightCol = st.columns([8,1,4]) 
-		video_file_buffer = st.sidebar.file_uploader("Upload a Video", type=['mp4', 'mov', 'avi', 'asf', 'm4v'])
+		video_file_buffer = st.sidebar.file_uploader("Upload a Video", type=['mp4', 'mov', 'avi'])
 		temp_file = tempfile.NamedTemporaryFile(delete=False)
 
 		if not video_file_buffer:
@@ -217,27 +218,20 @@ def main():
 		st.sidebar.video(temp_file.name)
 
 		fps = 0
-		i = 0
+		
 
 		drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
 
-		#kpil1, kpil2, kpil3 = st.columns(3)
-
-		#with kpil1:
-		#	st.markdown('**Frame Rate**')
-		#	kpil1_text = st.markdown('0')
-
-		#with kpil2:
-		#	st.markdown('**Detected Faces**')
-		#	kpil2_text = st.markdown('0')
-
-		#st.markdown('<hr/>', unsafe_allow_html=True)
 		
-		
-		face_count, result_dict = analysis.decode_video_mediapipe(video, None, 0, drawing_spec, max_faces, detection_confidence, tracking_confidence, left_placeholder, right_placeholder, video_frame_placeholder)
-
+		analysis.decode_video_mediapipe(video, max_faces, detection_confidence, tracking_confidence, left_placeholder, right_placeholder, video_frame_placeholder, video_text_placeholder)
+		print('here')
+		try:
+			os.remove('output1.mp4')
+		except OSError as e:
+			# If it fails, inform the user.
+			print("Error: %s - %s." % (e.filename, e.strerror))
 
                 
 if __name__ == "__main__":
 	main()
-
+	
