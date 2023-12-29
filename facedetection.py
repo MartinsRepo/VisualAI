@@ -166,7 +166,7 @@ def main():
 			unsafe_allow_html=True,
 		)
 
-		max_faces = st.sidebar.number_input('Maximum Number of Faces', value=5, min_value=1)
+		max_faces = st.sidebar.number_input('Maximum Number of Faces', value=2, min_value=1)
 		st.sidebar.markdown('---')
 		detection_confidence = st.sidebar.slider('Min Detection Confidence', min_value=0.0,max_value=1.0,value=0.5)
 		tracking_confidence = st.sidebar.slider('Min Tracking Confidence', min_value=0.0,max_value=1.0,value=0.5)

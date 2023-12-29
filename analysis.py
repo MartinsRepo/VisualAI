@@ -7,6 +7,9 @@ from PIL import Image
 from io import BytesIO
 import base64
 import gc
+import random
+#from apscheduler import Scheduler
+
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -19,6 +22,9 @@ hands = mp_hands.Hands(
 		min_detection_confidence=0.5,
 		min_tracking_confidence=0.5
 	)
+
+
+#sched = Scheduler()
 
 #https://raw.githubusercontent.com/google/mediapipe/master/mediapipe/modules/face_geometry/data/canonical_face_model_uv_visualization.png
 # Left eyes indices 
@@ -494,6 +500,7 @@ def image_resize(image, width=None, height=None, inter=cv.INTER_AREA):
 
 def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_placeholder):
 	dist=[]
+	scenery = [None] * 10 # max 10 faces
 	
 	result_dict = {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] };
 	drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
@@ -556,7 +563,15 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 			facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below)
 			
 			# describe the scenery by text
-			scenery = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
+			scene = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
+			scenery[face_count] = ('Face '+ str(face_count) + ': ' + scene)
+			
+			# writing face number to image
+			if int(fmark[1]*ih) > 0:
+				cv.putText(annotated_image,str(face_count), (int(fmark[0]*iw), int(fmark[1]*ih)), cv.FONT_HERSHEY_PLAIN, 2, (208,32,144),3)
+			else:
+				cv.putText(annotated_image,str(face_count), (int(fmark[2]*iw), int(fmark[3]*ih)), cv.FONT_HERSHEY_PLAIN, 2, (208,32,144),3)
+
 			
 			face_count += 1
 			faceXY = None
@@ -581,9 +596,9 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 				</style>
 				<div class="spacer"></div>
 			""", unsafe_allow_html=True)
+		for i in range(face_count):
+			right_placeholder.text_area("Detected Scenery", value=scenery[i], height=100)
 		
-		right_placeholder.text_area("Detected Scenery", value=scenery, height=100)
-		right_placeholder.text_area("Detected Number of Faces:", value=str(face_count), height=12)
 		right_placeholder.text_area("Debug Window:", value=str(result_dict), height=150)
 		
 		# cleanup
@@ -591,23 +606,29 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 		st.cache_resource.clear()
 
 
+#def textout1s_job(scenery):
+#	for x in scenery:
+#		sttext.text_area("Detected Scenery", value=x, height=100,  key=str(random.random()))
+
+
 def decode_video_mediapipe(video, stframe, sttext, max_faces, detection_confidence, tracking_confidence):
 	
 	result_dict = {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] };
 	drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
-	
-	#left_placeholder, empty_placeholder, right_placeholder = st.columns([8, 1, 4])
+	scenery = [None] * 10 # max 10 faces
+
 	video_column, text_column = st.columns([2, 1])
+	
 	with mp.solutions.face_mesh.FaceMesh(
 		max_num_faces=max_faces,
 		min_detection_confidence=detection_confidence,
 		min_tracking_confidence=tracking_confidence
 
 	) as face_mesh:
-		#prevTime = 0
-		#i = 0
-		key = 0
 		face_count = 0
+		
+		#sched.add_interval_job(textout1s_job, seconds = 1, args=[scenery,])
+		#sched.start()
 		
 		while video.isOpened():
 			
@@ -625,7 +646,6 @@ def decode_video_mediapipe(video, stframe, sttext, max_faces, detection_confiden
 				
 				#Face Landmark Drawing
 				for face_landmarks in results.multi_face_landmarks:
-					face_count += 1
 					
 					faceXY = []
 					image_points = np.empty((0, 2), int)
@@ -677,8 +697,16 @@ def decode_video_mediapipe(video, stframe, sttext, max_faces, detection_confiden
 					facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below)
 					
 					# describe the scenery by text
-					scenery = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
+					scene = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
 					
+					scenery.append('Face ' +  str(face_count) + ': ' + scene+'\n')
+					
+					# writing face number to image
+					if int(fmark[1]*ih) > 0:
+						cv.putText(frame, str(face_count), (int(fmark[0]*iw), int(fmark[1]*ih)), cv.FONT_HERSHEY_PLAIN, 3, (208,32,144),3)
+					else:
+						cv.putText(frame, str(face_count), (int(fmark[2]*iw), int(fmark[3]*ih)), cv.FONT_HERSHEY_PLAIN, 3, (208,32,144),3)
+						
 					face_count += 1
 					faceXY = None
 					image_points = None
@@ -698,10 +726,8 @@ def decode_video_mediapipe(video, stframe, sttext, max_faces, detection_confiden
 				
 				with video_column:
 					stframe.image(frame,channels='BGR', use_column_width=False)
-				
-				
-				with text_column:		
-					mykey = "abc"+str(key)
-					sttext.text_area("Detected Scenery", value=scenery, height=150, key=mykey)
-					key += 1
-				
+
+				for x in scenery:
+					sttext.text_area("Detected Scenery", value=x, height=100,  key=str(random.random()))
+					
+		#sched.shutdown()
