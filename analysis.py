@@ -13,6 +13,13 @@ mp_drawing_styles = mp.solutions.drawing_styles
 mp_face_mesh = mp.solutions.face_mesh
 mp_hands = mp.solutions.hands
 
+hands = mp_hands.Hands(
+		static_image_mode=True,
+		max_num_hands=2,
+		min_detection_confidence=0.5,
+		min_tracking_confidence=0.5
+	)
+
 #https://raw.githubusercontent.com/google/mediapipe/master/mediapipe/modules/face_geometry/data/canonical_face_model_uv_visualization.png
 # Left eyes indices 
 LEFT_EYE =[ 362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385,384, 398 ]
@@ -143,15 +150,8 @@ def faceSquareExtractor(faceoval):
 
 
 ### Hand detection
-def detect_hands(image):
+def detect_hands(hands, image):
 	
-	hands = mp_hands.Hands(
-		static_image_mode=True,
-		max_num_hands=2,
-		min_detection_confidence=0.5,
-		min_tracking_confidence=0.5
-	)
-		
 	results = hands.process(image)
 	
 	if results.multi_hand_landmarks:
@@ -542,7 +542,7 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 			noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
 
 			# calculate and draw hand positions
-			hand_landmarks = detect_hands(annotated_image)
+			hand_landmarks = detect_hands(hands, annotated_image)
 			
 			str_hands =''
 			is_below = None
@@ -591,42 +591,42 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 		st.cache_resource.clear()
 
 
-def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_confidence, left_placeholder, right_placeholder,video_frame_placeholder, video_text_placeholder):
+def decode_video_mediapipe(video, stframe, sttext, max_faces, detection_confidence, tracking_confidence):
 	
 	result_dict = {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] };
 	drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
-		
+	
+	#left_placeholder, empty_placeholder, right_placeholder = st.columns([8, 1, 4])
+	video_column, text_column = st.columns([2, 1])
 	with mp.solutions.face_mesh.FaceMesh(
 		max_num_faces=max_faces,
 		min_detection_confidence=detection_confidence,
 		min_tracking_confidence=tracking_confidence
 
 	) as face_mesh:
-		prevTime = 0
+		#prevTime = 0
 		#i = 0
 		key = 0
 		face_count = 0
 		
 		while video.isOpened():
 			
-			#i +=1
-			_, frame = video.read()
+			ret, frame = video.read()
+			if not ret:
+				continue
 
-			if frame is None:
-				#video.release()
-				break
-				
-			 # Convert the frame to RGB (OpenCV uses BGR by default)
-			frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-			frame = image_resize(frame, width=640, height=480, inter=cv.INTER_AREA)
-
-		
 			results = face_mesh.process(frame)
+			frame.flags.writeable = True
 			
 			ih, iw, _ = frame.shape
+			face_count = 0
 			
 			if results.multi_face_landmarks:
+				
+				#Face Landmark Drawing
 				for face_landmarks in results.multi_face_landmarks:
+					face_count += 1
+					
 					faceXY = []
 					image_points = np.empty((0, 2), int)
 					f_arr, ip_arr = getImagePoints(face_landmarks, iw, ih)
@@ -664,8 +664,8 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 					noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
 
 					# calculate and draw hand positions
-					hand_landmarks = detect_hands(frame)
-					
+					hand_landmarks = detect_hands(hands, frame)
+
 					str_hands =''
 					is_below = None
 					if hand_landmarks is not None:
@@ -682,6 +682,7 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 					face_count += 1
 					faceXY = None
 					image_points = None
+					hand_landmarks = None
 				
 				# for display purpose collect results
 				result_dict["FacedirH"].append(str(facedir_horiz))
@@ -692,36 +693,15 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 				result_dict["Tilt"].append(str(tilt))
 				result_dict["NoseVec"].append(str(noseDirAng))
 				
-				#print(result_dict)
+				frame = cv.resize(frame,(0,0), fx=0.4, fy=0.4)
+				frame = image_resize(image=frame, width=640)
 				
-				# Convert the frame to a PIL Image
-				image = Image.fromarray(frame)
-
-				# Save the PIL image to a BytesIO object
-				buffered_image = BytesIO()
-				image.save(buffered_image, format='JPEG')
-				buffered_image.seek(0)
-
-				# Display the image in the Streamlit app
-				video_frame_placeholder.image(buffered_image, channels='RGB')
+				with video_column:
+					stframe.image(frame,channels='BGR', use_column_width=False)
 				
-				video_text_placeholder.markdown("""
-						<style>
-							.spacer {
-								margin-top: 200px;  /* Adjust the size as needed */
-							}
-						</style>
-						<div class="spacer"></div>
-					""", unsafe_allow_html=True)
 				
-				mykey = "abc"+str(key)
-				video_text_placeholder.text_area("Detected Scenery", value=scenery, height=150, key=mykey)
-				key += 1
-				
-				# cleanup
-				st.cache_data.clear()
-				st.cache_resource.clear()
-				gc.collect()
-		video.release()
-
+				with text_column:		
+					mykey = "abc"+str(key)
+					sttext.text_area("Detected Scenery", value=scenery, height=150, key=mykey)
+					key += 1
 				

@@ -46,15 +46,6 @@ app_mode = st.sidebar.selectbox(
     ['Image','Video','About']
 )
 
-
-def disp_res(source, kpil1_text, kpil2_text, face_count, fps):
-	if source == 'image':
-		kpil1_text.write(f"<h1 style='text-align: center; color:red;'>{face_count}</h1>", unsafe_allow_html=True)
-	elif source == 'video':
-		kpil1_text.write(f"<h1 style='text-align: center; color:red;'>{int(fps)}</h1>", unsafe_allow_html=True)
-		kpil2_text.write(f"<h1 style='text-align: center; color:red;'>{face_count}</h1>", unsafe_allow_html=True)
-
-
 def main():
 
 	# About Page
@@ -110,9 +101,6 @@ def main():
 			unsafe_allow_html=True,
 		)
 
-#		st.markdown("**Detected Faces**")
-#		kpil1_text = st.markdown('0')
-
 		max_faces = st.sidebar.number_input('Maximum Number of Faces', value=3, min_value=1)
 		st.sidebar.markdown('---')
 
@@ -154,12 +142,6 @@ def main():
 	# Video Page
 	elif app_mode == 'Video':
 		
-		# cleanup
-		st.cache_data.clear()
-		st.cache_resource.clear()
-		
-		left_placeholder, empty_placeholder, right_placeholder = st.columns([4, 1, 4])
-		
 		use_webcam = st.sidebar.button('Use Webcam')
 		record = st.sidebar.checkbox("Record Video")
 
@@ -191,7 +173,9 @@ def main():
 		st.sidebar.markdown('---')
 
 		## Get Video
-		leftCol, empty1, rightCol = st.columns([8,1,4]) 
+		stframe = st.empty()
+		sttext = st.empty()
+		
 		video_file_buffer = st.sidebar.file_uploader("Upload a Video", type=['mp4', 'mov', 'avi'])
 		temp_file = tempfile.NamedTemporaryFile(delete=False)
 
@@ -218,12 +202,9 @@ def main():
 		st.sidebar.video(temp_file.name)
 
 		fps = 0
+		i = 0
 		
-
-		drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
-
-		
-		analysis.decode_video_mediapipe(video, max_faces, detection_confidence, tracking_confidence, left_placeholder, right_placeholder, video_frame_placeholder, video_text_placeholder)
+		analysis.decode_video_mediapipe(video, stframe, sttext, max_faces, detection_confidence, tracking_confidence)
 		print('here')
 		try:
 			os.remove('output1.mp4')
