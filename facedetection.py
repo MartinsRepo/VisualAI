@@ -14,7 +14,7 @@ DEMO_IMAGE = 'demo/demo.jpg'
 DEMO_VIDEO = 'demo/demo.mp4'
 
 st.set_page_config(layout="wide")
-left_placeholder, empty_placeholder, right_placeholder = st.columns([8, 1, 4])
+left_placeholder, empty_placeholder, right_placeholder = st.columns([10, 1, 4])
 video_frame_placeholder = st.empty()
 video_text_placeholder = st.empty()
 with left_placeholder:
@@ -50,29 +50,39 @@ def main():
 
 	# About Page
 	if app_mode == 'About':
-		st.markdown('''
-			## Face Mesh \n
-			In this application we are using **MediaPipe** for creating a Face Mesh. **StreamLit** is to create 
-			the Web Graphical User Interface (GUI) \n
-			
-			- [Github](https://github.com/mpolinowski/streamLit-cv-mediapipe) \n
-		''')
+		image = Image.open('about.png')
+		col1, col2 = st.columns([1, 2])
+		
+		with col1:
+			# Display the image in the first column
+			st.markdown(
+				"""
+					<style>
+						.image-container {
+						    margin-top: 50px;  
+						}
+					</style>
+					<div class="image-container">
+					<img src="about.png" alt="">
+					</div>
+				""", unsafe_allow_html=True
+)
+			st.image(image, caption='')
 
-		## Add Sidebar and Window style
-		st.markdown(
-			"""
-				<style>
-				[data-testid="stSidebar"][aria-expanded="true"] > div:first-child{
-				    width: 350px
-				}
-				[data-testid="stSidebar"][aria-expanded="false"] > div:first-child{
-				    width: 350px
-				    margin-left: -350px
-				}
-				</style>
-			""",
-			unsafe_allow_html=True,
-		)
+		with col2:
+			# Display the About message in the second column
+			st.write("""
+				## About VisualAI
+				The purpose of this application is to interprete the states of faces in a scenario with persons
+				to feed this to loacal LLM AI interfaced by Langchain.\n 
+				**Google Mediapipe** is used to perform this. **Streamlit** is used for the media interface (GUI).\n
+				- **Martin Hummel**,\n
+				  Senior Software Engineer,\n
+				  Germany/Bavaria/Regensburg\n
+				- Email: jupp@linuxmail.org\n	
+				- [Github](https://github.com/MartinsRepo/VisualAI) \n
+				**Dec. 2023**
+			""")
 
 	# Image Page
 	elif app_mode == 'Image':
