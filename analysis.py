@@ -587,7 +587,8 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 			# for display purpose collect results
 			key = 'f'+str(face_count)
 			result_dict[key] = {'FacedirH': str(facedir_horiz), 'FacedirV': str(facedir_vert), 'Drowsy': str(drowsy), 'Distracted': str(distracted), 
-						'RotMatrix': str(rotation_vector), 'Tilt': str(tilt), 'NoseVec': str(noseDirAng)}
+						'RotMatrix': str(np.round(rotation_vector, 2)), 'Tilt': str(np.round(tilt, 2)), 
+						'NoseVec': str(np.round(noseDirAng, 2))}
 			 
 		
 		left_placeholder.image(annotated_image, use_column_width=True)
