@@ -502,7 +502,14 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 	dist=[]
 	scenery = [None] * 10 # max 10 faces
 	
-	result_dict = {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] };
+	#dictionary for 5 faces 
+	result_dict = {
+		'f1': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] },
+		'f2': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] },
+		'f3': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] },
+		'f4': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] },
+		'f5': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] } }
+	
 	drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
 	
 	if results.multi_face_landmarks:
@@ -576,15 +583,12 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 			face_count += 1
 			faceXY = None
 			image_points = None
-
-		# for display purpose collect results
-		result_dict["FacedirH"].append(str(facedir_horiz))
-		result_dict["FacedirV"].append(str(facedir_vert))
-		result_dict["Drowsy"].append(str(drowsy))
-		result_dict["Distracted"].append(str(distracted))
-		result_dict["RotMatrix"].append(str(rotation_vector))
-		result_dict["Tilt"].append(str(tilt))
-		result_dict["NoseVec"].append(str(noseDirAng))
+			
+			# for display purpose collect results
+			key = 'f'+str(face_count)
+			result_dict[key] = {'FacedirH': str(facedir_horiz), 'FacedirV': str(facedir_vert), 'Drowsy': str(drowsy), 'Distracted': str(distracted), 
+						'RotMatrix': str(rotation_vector), 'Tilt': str(tilt), 'NoseVec': str(noseDirAng)}
+			 
 		
 		left_placeholder.image(annotated_image, use_column_width=True)
 
@@ -599,7 +603,9 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 		for i in range(face_count):
 			right_placeholder.text_area("Detected Scenery", value=scenery[i], height=100)
 		
-		right_placeholder.text_area("Debug Window:", value=str(result_dict), height=150)
+		for k in result_dict.keys():
+			if result_dict[k]['FacedirH'] :
+				right_placeholder.text_area("Debug Window:", value=str(k)+': '+str(result_dict[k]), height=50, key=str(random.random()))
 		
 		# cleanup
 		st.cache_data.clear()
@@ -615,7 +621,7 @@ def decode_video_mediapipe(video, stframe, sttext, max_faces, detection_confiden
 	
 	result_dict = {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] };
 	drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
-	scenery = [None] * 10 # max 10 faces
+	scenery = [None] * 5 # max 5 faces
 
 	video_column, text_column = st.columns([2, 1])
 	
