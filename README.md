@@ -1,4 +1,4 @@
-![File not found](intro.png)
+![intro](intro.png)
 # VisualAI - Textual Facedetection
 **Python Version used:** 3.11.4
 ## A) Installation
@@ -69,6 +69,8 @@ After activating the environment:
 - It starts up with image processing. You can upload images from ./images/persons. Some examples can be found here. An evaluation document can be found here [drvmonpics.doc](./images/drvmonpicsdoc.odt)
 - Selecting **video**, a demo video is started. You can also upload videos form ./video/persons. If pressing the webcam button, the frames of a USB Webcam are shown and processed.
 
-![File not found](startup.png)
+![screenshot](startup.png)
 
+**Demo Video**
+- To see the application in action, check out our demo video: [View Demo](./demo.webm)
 > Written with [StackEdit](https://stackedit.io/).
