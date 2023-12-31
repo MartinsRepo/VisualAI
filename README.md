@@ -72,5 +72,5 @@ After activating the environment:
 ![screenshot](startup.png)
 
 **Demo Video**
-- To see the application in action, check out our demo video: [View Demo](./demo.webm)
+- To see the application in action, check out our demo video: [View Demo](./camdemo.webm)
 > Written with [StackEdit](https://stackedit.io/).
