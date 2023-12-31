@@ -53,14 +53,22 @@ Update .bashrc:
 ### 3. Running VisualAI
 > streamlit run facedetection.py
 
-### 2. Python Packages
-**Prerequisites:** Compiling and installing the llama.cpp package, under windows, unfortunaltly we must install (if not done already) **Visual Studio** (here: 2022 Community Edition):
-
-https://visualstudio.microsoft.com/de/downloads/
-
 **Installing Dependencies:**
 After activating the environment:
 >pip install -r requirements.txt
 
+### 3. Running VisualAI
+> streamlit run facedetection.py
+
+
+**Installing Dependencies:**
+After activating the environment:
+>pip install -r requirements.txt
+### 4. Usage
+**Startup Screen**
+- It starts up with image processing. You can upload images from ./images/persons. Some examples can be found here. An evaluation document can be found here [drvmonpics.doc](./images/drvmonpicsdoc.odt)
+- Selecting **video**, a demo video is started. You can also upload videos form ./video/persons. If pressing the webcam button, the frames of a USB Webcam are shown and processed.
+
+![File not found](startup.png)
 
 > Written with [StackEdit](https://stackedit.io/).
