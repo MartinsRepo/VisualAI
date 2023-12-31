@@ -8,12 +8,13 @@ import tempfile
 import time
 from PIL import Image
 
+st.set_page_config(layout="wide")
+st.session_state.setdefault("rows", {})
 import analysis
 
 DEMO_IMAGE = 'demo/demo.jpg'
 DEMO_VIDEO = 'demo/demo.mp4'
 
-st.set_page_config(layout="wide")
 left_placeholder, empty_placeholder, right_placeholder = st.columns([10, 1, 4])
 video_frame_placeholder = st.empty()
 video_text_placeholder = st.empty()
@@ -182,10 +183,7 @@ def main():
 		tracking_confidence = st.sidebar.slider('Min Tracking Confidence', min_value=0.0,max_value=1.0,value=0.5)
 		st.sidebar.markdown('---')
 
-		## Get Video
-		stframe = st.empty()
-		sttext = st.empty()
-		
+		## Get Video	
 		video_file_buffer = st.sidebar.file_uploader("Upload a Video", type=['mp4', 'mov', 'avi'])
 		temp_file = tempfile.NamedTemporaryFile(delete=False)
 
@@ -206,7 +204,7 @@ def main():
 
 		## Recording
 		codec = cv.VideoWriter_fourcc(*"mp4v")
-		out = cv.VideoWriter('output1.mp4', codec, fps_input, (width,height))
+		out = cv.VideoWriter('output.mp4', codec, fps_input, (width,height))
 
 		st.sidebar.text('Input Video')
 		st.sidebar.video(temp_file.name)
@@ -214,10 +212,10 @@ def main():
 		fps = 0
 		i = 0
 		
-		analysis.decode_video_mediapipe(video, stframe, sttext, max_faces, detection_confidence, tracking_confidence)
-		print('here')
+		analysis.decode_video_mediapipe(video, max_faces, detection_confidence, tracking_confidence)
+
 		try:
-			os.remove('output1.mp4')
+			os.remove('output.mp4')
 		except OSError as e:
 			# If it fails, inform the user.
 			print("Error: %s - %s." % (e.filename, e.strerror))

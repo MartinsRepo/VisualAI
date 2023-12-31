@@ -8,8 +8,12 @@ from io import BytesIO
 import base64
 import gc
 import random
-#from apscheduler import Scheduler
+import threading
 
+
+stframe = st.empty()
+sttext = st.empty()
+disp = False
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -23,8 +27,6 @@ hands = mp_hands.Hands(
 		min_tracking_confidence=0.5
 	)
 
-
-#sched = Scheduler()
 
 #https://raw.githubusercontent.com/google/mediapipe/master/mediapipe/modules/face_geometry/data/canonical_face_model_uv_visualization.png
 # Left eyes indices 
@@ -53,7 +55,6 @@ ear = [0, 0]
 # Define thresholds for drowsiness and distraction detection
 drowsy_threshold = 150  # Adjust as needed
 distracted_threshold = 15  # Adjust as needed
-
 
 
 # Helper functions
@@ -87,8 +88,6 @@ def convert(NormalizedLandmark):
 # Returns angle in radians
 def calculate_spatial_angles(p1, p2, image_points, nose_end_point2D):
 
-	#delta_x = abs(p1[0] - p2[0])
-	#delta_y = abs(p1[1] - p2[1])
 	delta_x = p2[0] - p1[0]
 	delta_y = p2[1] - p1[1]
 
@@ -270,7 +269,6 @@ def faceProfileExtractor(source, landmarks):
 	tilt=tilt*100
 	
 	asr_ind = getAspectRatio(right_eye_landmarks, left_eye_landmarks)
-	
 	
 	return rmark, lmark, tilt, faceoval_coords, asr_ind
 
@@ -613,17 +611,19 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 		st.cache_resource.clear()
 
 
-#def textout1s_job(scenery):
-#	for x in scenery:
-#		sttext.text_area("Detected Scenery", value=x, height=100,  key=str(random.random()))
+#Periodically output of the scenery text
+def background_task():
+	global disp
+	disp = True		
+	threading.Timer(1, background_task).start()
 
 
-def decode_video_mediapipe(video, stframe, sttext, max_faces, detection_confidence, tracking_confidence):
-	
+def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_confidence):
+	global stframe, sttext, disp
+
 	result_dict = {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] };
 	drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
-	scenery = [None] * 5 # max 5 faces
-
+	
 	video_column, text_column = st.columns([2, 1])
 	
 	with mp.solutions.face_mesh.FaceMesh(
@@ -634,11 +634,11 @@ def decode_video_mediapipe(video, stframe, sttext, max_faces, detection_confiden
 	) as face_mesh:
 		face_count = 0
 		
-		#sched.add_interval_job(textout1s_job, seconds = 1, args=[scenery,])
-		#sched.start()
+		timerthread = threading.Timer(1, background_task)
+		timerthread.daemon = True
+		timerthread.start()
 		
-		while video.isOpened():
-			
+		while video.isOpened():	
 			ret, frame = video.read()
 			if not ret:
 				continue
@@ -650,7 +650,8 @@ def decode_video_mediapipe(video, stframe, sttext, max_faces, detection_confiden
 			face_count = 0
 			
 			if results.multi_face_landmarks:
-				
+				scenery = [None] * 5 # max 5 faces
+
 				#Face Landmark Drawing
 				for face_landmarks in results.multi_face_landmarks:
 					
@@ -727,14 +728,19 @@ def decode_video_mediapipe(video, stframe, sttext, max_faces, detection_confiden
 				result_dict["RotMatrix"].append(str(rotation_vector))
 				result_dict["Tilt"].append(str(tilt))
 				result_dict["NoseVec"].append(str(noseDirAng))
-				
+								
 				frame = cv.resize(frame,(0,0), fx=0.4, fy=0.4)
 				frame = image_resize(image=frame, width=640)
 				
 				with video_column:
 					stframe.image(frame,channels='BGR', use_column_width=False)
 
-				for x in scenery:
-					sttext.text_area("Detected Scenery", value=x, height=100,  key=str(random.random()))
+				if disp: 
+					out = ''
+					for scen in scenery:
+						if scen is not None:
+							out = out + scen + '\n'
+
+					sttext.markdown(out)
+					disp = False
 					
-		#sched.shutdown()
