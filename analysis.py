@@ -13,6 +13,7 @@ import threading
 
 stframe = st.empty()
 sttext = st.empty()
+stdebug = st.empty()
 disp = False
 
 mp_drawing = mp.solutions.drawing_utils
@@ -38,6 +39,13 @@ FACE_OVAL=[ 10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365,
 #nose
 NOSE=[ 129, 49, 131, 134, 51, 5, 281, 163, 160, 279, 350, 327, 326, 97, 98] 
 
+#dictionary for 5 faces 
+result_dict = {
+	'f1': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] },
+	'f2': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] },
+	'f3': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] },
+	'f4': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] },
+	'f5': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] } }
 
 # 3D model points.
 face3Dmodel = np.array([
@@ -500,14 +508,6 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 	dist=[]
 	scenery = [None] * 10 # max 10 faces
 	
-	#dictionary for 5 faces 
-	result_dict = {
-		'f1': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] },
-		'f2': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] },
-		'f3': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] },
-		'f4': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] },
-		'f5': {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] } }
-	
 	drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
 	
 	if results.multi_face_landmarks:
@@ -719,15 +719,13 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 					faceXY = None
 					image_points = None
 					hand_landmarks = None
+					
+					# for display purpose collect results
+					key = 'f'+str(face_count)
+					result_dict[key] = {'FacedirH': str(facedir_horiz), 'FacedirV': str(facedir_vert), 'Drowsy': str(drowsy), 'Distracted': str(distracted), 
+								'RotMatrix': str(np.round(rotation_vector, 2)), 'Tilt': str(np.round(tilt, 2)), 
+								'NoseVec': str(np.round(noseDirAng, 2))}
 				
-				# for display purpose collect results
-				result_dict["FacedirH"].append(str(facedir_horiz))
-				result_dict["FacedirV"].append(str(facedir_vert))
-				result_dict["Drowsy"].append(str(drowsy))
-				result_dict["Distracted"].append(str(distracted))
-				result_dict["RotMatrix"].append(str(rotation_vector))
-				result_dict["Tilt"].append(str(tilt))
-				result_dict["NoseVec"].append(str(noseDirAng))
 								
 				frame = cv.resize(frame,(0,0), fx=0.4, fy=0.4)
 				frame = image_resize(image=frame, width=640)
@@ -741,6 +739,14 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 						if scen is not None:
 							out = out + scen + '\n'
 
-					sttext.markdown(out)
+					sttext.markdown("Scenery:\n\n"+out)
+					
+					out = ''
+					for k in result_dict.keys():
+						if bool(result_dict.get(k)):
+							if result_dict[k]['FacedirH'] :
+								out = out+str(k)+': '+str(result_dict[k]) + '\n\n'
+					stdebug.markdown("Debug Window:\n\n"+out)
 					disp = False
+				
 					
