@@ -314,7 +314,7 @@ def noseVector(faceXY, image_points, size):
 	p1 = (int(image_points[0][0]), int(image_points[0][1]))
 	p2 = (int(nose_end_point2D[0][0][0]), int(nose_end_point2D[0][0][1]))
 	
-	return p1, p2, distance, nose_end_point2D, rotation_vector 
+	return p1, p2, rotation_vector 
 
 
 def scenery_handdetection(height, width, hand_landmarks):
@@ -548,7 +548,7 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 			rpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[5][0], image_points[5][1]), False)
 			
 			# nose vector 2d representation
-			p1, p2, dist, nose_end_point2D, rotation_vector = noseVector(faceXY, image_points, frame.shape)
+			p1, p2, rotation_vector = noseVector(faceXY, image_points, frame.shape)
 			#cv.line(annotated_image, p1, p2, (38, 128, 15), 2)
 			cv.line(annotated_image, p1, p2, (238, 255, 0), 3)
 
@@ -687,10 +687,10 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 					rpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[5][0], image_points[5][1]), False)
 					
 					# nose vector 2d representation
-					p1, p2, dist, nose_end_point2D, rotation_vector = noseVector(faceXY, image_points, frame.shape)
+					p1, p2, rotation_vector = noseVector(faceXY, image_points, frame.shape)
 					cv.line(frame, p1, p2, (238, 255, 0), 4)
 
-					noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
+					noseDirAng = calculate_spatial_angles(p1, p2)
 
 					# calculate and draw hand positions
 					hand_landmarks = detect_hands(hands, frame)
