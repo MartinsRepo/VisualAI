@@ -94,7 +94,7 @@ def convert(NormalizedLandmark):
 
 
 # Returns angle in radians
-def calculate_spatial_angles(p1, p2, image_points, nose_end_point2D):
+def calculate_spatial_angles(p1, p2):
 
 	delta_x = p2[0] - p1[0]
 	delta_y = p2[1] - p1[1]
@@ -313,7 +313,7 @@ def noseVector(faceXY, image_points, size):
 	# draw vector head position
 	p1 = (int(image_points[0][0]), int(image_points[0][1]))
 	p2 = (int(nose_end_point2D[0][0][0]), int(nose_end_point2D[0][0][1]))
-
+	
 	return p1, p2, distance, nose_end_point2D, rotation_vector 
 
 
@@ -364,7 +364,8 @@ def create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_in
 	
 	# detect vertical position
 	if facedir_horiz == 0:
-		if is_between(-90, noseDirAng[0], 0) and is_between(-3.5, rotation_vector[0], -2.5) and is_between(-0.25, rotation_vector[1], 0.25):
+		#print( noseDirAng[0], rotation_vector[0], rotation_vector[1])
+		if is_between(-45, noseDirAng[0], 45) and is_between(-3.5, rotation_vector[0], -2) and is_between(-0.25, rotation_vector[1], 0.25):
 			facedir_vert = 0
 		elif is_between(-10, noseDirAng[0], 10) and  is_between(-2.49, rotation_vector[0], 0):
 			facedir_vert= -1
@@ -551,7 +552,7 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 			#cv.line(annotated_image, p1, p2, (38, 128, 15), 2)
 			cv.line(annotated_image, p1, p2, (238, 255, 0), 3)
 
-			noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
+			noseDirAng = calculate_spatial_angles(p1, p2)
 
 			# calculate and draw hand positions
 			hand_landmarks = detect_hands(hands, annotated_image)
@@ -569,13 +570,13 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 			
 			# describe the scenery by text
 			scene = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
-			scenery[face_count] = ('Face '+ str(face_count) + ': ' + scene)
+			scenery[face_count] = ('Face '+ str(face_count+1) + ': ' + scene)
 			
 			# writing face number to image
 			if int(fmark[1]*ih) > 0:
-				cv.putText(annotated_image,str(face_count), (int(fmark[0]*iw), int(fmark[1]*ih)), cv.FONT_HERSHEY_PLAIN, 2, (208,32,144),3)
+				cv.putText(annotated_image,str(face_count+1), (int(fmark[0]*iw), int(fmark[1]*ih)), cv.FONT_HERSHEY_PLAIN, 2, (205,108,0),3)
 			else:
-				cv.putText(annotated_image,str(face_count), (int(fmark[2]*iw), int(fmark[3]*ih)), cv.FONT_HERSHEY_PLAIN, 2, (208,32,144),3)
+				cv.putText(annotated_image,str(face_count+1), (int(fmark[2]*iw), int(fmark[3]*ih)), cv.FONT_HERSHEY_PLAIN, 2, (255,108,0),3)
 
 			
 			face_count += 1
@@ -679,7 +680,7 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 			
 					# verify oval coordinates
 					pts = np.array(ovalcoords,np.int32)
-					cv.polylines(frame, [pts], True, (255,100,100), 2)
+					cv.polylines(frame, [pts], True, (255,100,100), 3)
 				
 					## calculate, whether a person looks to the left(right) side or looks in straight direction
 					lpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[4][0], image_points[4][1]), False)
@@ -687,7 +688,7 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 					
 					# nose vector 2d representation
 					p1, p2, dist, nose_end_point2D, rotation_vector = noseVector(faceXY, image_points, frame.shape)
-					cv.line(frame, p1, p2, (238, 255, 0), 3)
+					cv.line(frame, p1, p2, (238, 255, 0), 4)
 
 					noseDirAng = calculate_spatial_angles(p1, p2, image_points, nose_end_point2D)
 
@@ -707,13 +708,13 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 					# describe the scenery by text
 					scene = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
 					
-					scenery.append('Face ' +  str(face_count) + ': ' + scene+'\n')
+					scenery.append('Face ' +  str(face_count+1) + ': ' + scene+'\n')
 					
 					# writing face number to image
 					if int(fmark[1]*ih) > 0:
-						cv.putText(frame, str(face_count), (int(fmark[0]*iw), int(fmark[1]*ih)), cv.FONT_HERSHEY_PLAIN, 3, (208,32,144),3)
+						cv.putText(frame, str(face_count+1), (int(fmark[0]*iw), int(fmark[1]*ih)), cv.FONT_HERSHEY_PLAIN, 3, (208,32,144),3)
 					else:
-						cv.putText(frame, str(face_count), (int(fmark[2]*iw), int(fmark[3]*ih)), cv.FONT_HERSHEY_PLAIN, 3, (208,32,144),3)
+						cv.putText(frame, str(face_count+1), (int(fmark[2]*iw), int(fmark[3]*ih)), cv.FONT_HERSHEY_PLAIN, 3, (208,32,144),3)
 						
 					face_count += 1
 					faceXY = None
