@@ -1,7 +1,10 @@
 ![intro](intro.png)
 # VisualAI - Textual Facedetection
-**Python Version used:** 3.11.4
+For **Facedetection** we are using **Google Mediapipe**. [Link here](https://developers.google.com/mediapipe/solutions). From this we are using the solutions [Face Landmarker](https://developers.google.com/mediapipe/solutions/vision/face_landmarker) and [Hand Landmarker](https://developers.google.com/mediapipe/solutions/vision/hand_landmarker). The canonical Face Landmark Model is shown here: [Canonical Face Model](https://github.com/google/mediapipe/issues/1854). The model, used here, can be found on [mediapipe solutions](https://github.com/google/mediapipe/blob/master/docs/solutions/models.md).
+The streamlit layout was derived from [mpolinowski gitub](https://github.com/mpolinowski/streamLit-cv-mediapipe). The algo development has been strongly supported be my best coworker, **ChatGPT 4.0**. The software is licensed by **Apache License Version 2.0, January 2004**.
+
 ## A) Installation
+**Python Version used:** 3.11.4
 ### 1. Python Environment
 A virtual environment is a Python environment such that the Python interpreter, libraries and scripts installed into it are isolated from those installed in other virtual environments.
 #### Windows:

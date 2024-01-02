@@ -41,14 +41,13 @@ st.markdown(
 st.sidebar.title('Selection')
 st.sidebar.subheader('Parameter')
 
-## Define available pages in selection box
-app_mode = st.sidebar.selectbox(
-    'App Mode',
-    ['Image','Video','About']
-)
-
 def main():
-
+	## Define available pages in selection box
+	app_mode = st.sidebar.selectbox(
+	    'App Mode',
+	    ['Image','Video','About']
+	)
+	
 	# About Page
 	if app_mode == 'About':
 		image = Image.open('about.png')
