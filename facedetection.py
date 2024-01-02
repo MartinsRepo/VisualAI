@@ -152,6 +152,8 @@ def main():
 	# Video Page
 	elif app_mode == 'Video':
 		
+		# Selector for video interface number
+		video_interface_number = st.sidebar.number_input('Select Video Interface Number', min_value=0, value=0, step=1)
 		use_webcam = st.sidebar.button('Use Webcam')
 		record = st.sidebar.checkbox("Record Video")
 
@@ -188,7 +190,7 @@ def main():
 
 		if not video_file_buffer:
 			if use_webcam:
-				video = cv.VideoCapture(0)
+				video = cv.VideoCapture(video_interface_number)
 			else:
 				video = cv.VideoCapture(DEMO_VIDEO)
 				temp_file.name = DEMO_VIDEO
