@@ -220,13 +220,9 @@ def getImagePoints(landmarks, iw, ih):
 	faceXY = []
 	
 	for lm in enumerate(landmarks.landmark):	# loop over all land marks of one face
-
-		# Splitting the string into parts
-		parts = lm[1]
-		
 		# Extracting x and y values
-		x = int(parts.x*iw)
-		y = int(parts.y*ih)
+		x = int(lm[1].x*iw)
+		y = int(lm[1].y*ih)
 
 		faceXY.append((x, y))			# put all xy points in neat array
 
@@ -281,23 +277,9 @@ def faceProfileExtractor(source, landmarks):
 	return rmark, lmark, tilt, faceoval_coords, asr_ind
 
 
-def noseVector(faceXY, image_points, size):
+def noseVector(faceXY, faceXYZ, nose_2d, nose_3d, size):
 	
-	height, width = size[:2]
-	p1 = p2 = None
-	distance=[]
-	
-	#calculating nose direction vector
-	maxXY = max(faceXY, key=x_element)[0], max(faceXY, key=y_element)[1]
-	minXY = min(faceXY, key=x_element)[0], min(faceXY, key=y_element)[1]
-	
-	xcenter = int(image_points[0][0])
-	ycenter = int(image_points[0][1])
-	
-	distance.append((0, (int(((xcenter-width/2)**2+(ycenter-height/2)**2)**.4)), maxXY[0], minXY[0]))
-	
-	
-	dist_coeffs = np.zeros((4, 1))  # Assuming no lens distortion
+	dist_coeffs = np.zeros((4, 1), dtype=np.float64)  # Assuming no lens distortion
 	focal_length = size[1]
 	center = (size[1] / 2, size[0] / 2)
 	camera_matrix = np.array(
@@ -306,15 +288,28 @@ def noseVector(faceXY, image_points, size):
 		[0, 0, 1]], dtype="double"
 	) 
 	
-	(success, rotation_vector, translation_vector) = cv.solvePnP(face3Dmodel, image_points,  camera_matrix, dist_coeffs)
+	success, rotation_vector, translation_vector = cv.solvePnP(faceXYZ, faceXY, camera_matrix, dist_coeffs)
 	
-	(nose_end_point2D, jacobian) = cv.projectPoints(np.array([(0.0, 0.0, 1000.0)]), rotation_vector, translation_vector, camera_matrix, dist_coeffs)
-		
-	# draw vector head position
-	p1 = (int(image_points[0][0]), int(image_points[0][1]))
-	p2 = (int(nose_end_point2D[0][0][0]), int(nose_end_point2D[0][0][1]))
+	# Get rotational matrix
+	rotationsmatrix, jacobian = cv.Rodrigues(rotation_vector)
+
+	# Get angles
+	angles, mtxR, mtxQ, Qx, Qy, Qz = cv.RQDecomp3x3(rotationsmatrix)
+
+	# Get the y rotation degree
+	x = angles[0] * 360
+	y = angles[1] * 360
+	z = angles[2] * 360
 	
-	return p1, p2, rotation_vector 
+	rotangles = (x,y,z)
+	
+	# Display the nose direction
+	_, jacobian = cv.projectPoints(nose_3d, rotation_vector, translation_vector, camera_matrix, dist_coeffs)
+
+	p1 = (int(nose_2d[0]), int(nose_2d[1]))
+	p2 = (int(nose_2d[0] + y * 10) , int(nose_2d[1] - x * 10))
+	
+	return p1, p2, rotangles
 
 
 def scenery_handdetection(height, width, hand_landmarks):
@@ -334,61 +329,29 @@ def scenery_handdetection(height, width, hand_landmarks):
 	return str_hands, is_below
 
 
-def create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below):
+def create_scenerymarker(leye_inside, reye_inside, rotation_angles, thresholdx, thresholdy, rmark, lmark, aspect_ratio_indicator, is_below):
 	
-	lme=False	# left mouth endpoint
-	rme=False	# right mouth endpoint
+	x = rotation_angles[0]
+	y = rotation_angles[1]
 	
-	# head position
-	if lpoint_inside_oval >= 0:
-		lme = True
-	else:
-	   	lme = False
-	rme = True
-	if rpoint_inside_oval >= 0:
-		rme = True
-	else:
-		rme = False
-		
-	# face position left-straight-right
-	facedir_horiz = 99
-	if lme and rme:
-		facedir_horiz = 0  # straight
-	elif lme and not rme:
-		facedir_horiz = -1 # left
-	elif not lme and rme:
+	# See where the user's head tilting
+	facedir_horiz = 0
+	facedir_vert = 0
+	if y < -thresholdy and reye_inside:
+		print('1')
 		facedir_horiz = 1  # right
-	
-	# face position up-straight-down
-	facedir_vert = 99
-	
-	# detect vertical position
-	if facedir_horiz == 0:
-		#print( noseDirAng[0], rotation_vector[0], rotation_vector[1])
-		if is_between(-45, noseDirAng[0], 45) and is_between(-3.5, rotation_vector[0], -2) and is_between(-0.25, rotation_vector[1], 0.25):
-			facedir_vert = 0
-		elif is_between(-10, noseDirAng[0], 10) and  is_between(-2.49, rotation_vector[0], 0):
-			facedir_vert= -1
-		elif is_between(-180, noseDirAng[0], -160) and is_between(-0.6, rotation_vector[1], 0):
-			facedir_vert = 1
+	elif y > thresholdy and leye_inside:
+		print('2')
+		facedir_horiz = -1 # left
+	if x < -thresholdx:
+		print('3')
+		facedir_vert = -1
+	elif x > thresholdx:
+		print('4')
+		facedir_vert = 1
+	print('#',leye_inside, reye_inside)
+	print('##',thresholdx,thresholdy,facedir_horiz,facedir_vert,x,y)
 
-	elif facedir_horiz == -1:
-		if is_between(60, noseDirAng[0], 170) :
-			if is_between(-0.6, rotation_vector[0], 0.6):
-				facedir_vert = 0
-			elif rotation_vector[0]<0.6 or rotation_vector[0]>0.6 and tilt>=2:
-				facedir_vert = 1	
-		elif is_between(0, noseDirAng[0], 59) and tilt < -2:
-			facedir_vert = -1	
-	elif facedir_horiz == 1:
-		if is_between(-170, noseDirAng[0], -60) :
-			if noseDirAng[0] >- 120 and is_between(-2.5, tilt, 2.5):
-				facedir_vert = 0
-			elif is_between(-0.8, rotation_vector[0], -0.2):
-					facedir_vert = 1
-		elif is_between(-59, noseDirAng[0], 0) and tilt>3:
-			facedir_vert = -1
-	
 	# Calculate eye vertikal distances
 	rdelta = rmark[3] - rmark[2]
 	ldelta = lmark[3] - lmark[2]
@@ -518,14 +481,36 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 		ih, iw, _ = annotated_image.shape
 		
 		for face_landmarks in results.multi_face_landmarks:
-			faceXY = []
-			image_points = np.empty((0, 2), int)
-			f_arr, ip_arr = getImagePoints(face_landmarks, iw, ih)
-
-			faceXY.append(f_arr)		
-			image_points = np.append(image_points, ip_arr, axis=0)
 			
-			for i in image_points:
+			faceXY = []
+			faceXYZ = []
+			
+			image_points = np.empty((0, 2), int)
+			_, ip_arr = getImagePoints(face_landmarks, iw, ih)
+	
+			image_points = np.append(image_points, ip_arr, axis=0)
+
+			for idx, lm in enumerate(face_landmarks.landmark):
+				if idx == 33 or idx == 263 or idx == 1 or idx == 61 or idx == 291 or idx == 199:
+					if idx == 1:
+						nose_2d = (lm.x * iw, lm.y * ih)
+						nose_3d = (lm.x * iw, lm.y * ih, lm.z * 3000)
+
+					x, y = int(lm.x * iw), int(lm.y * ih)
+
+					# Get the 2D Coordinates
+					faceXY.append([x, y])
+
+					# Get the 3D Coordinates
+					faceXYZ.append([x, y, lm.z])       
+            
+			# Convert it to the NumPy array
+			faceXY= np.array(faceXY, dtype=np.float64)
+
+			# Convert it to the NumPy array
+			faceXYZ = np.array(faceXYZ, dtype=np.float64)
+			
+			for i in faceXY:
 				cv.circle(annotated_image,(int(i[0]),int(i[1])),2,(255,0,0),-1)
 				
 			# Eye and face oval extraction
@@ -543,13 +528,20 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 			pts = np.array(ovalcoords,np.int32)
 			cv.polylines(annotated_image, [pts], True, (255,100,100), 2)
 			
-			## calculate, whether a person looks to the left(right) side or looks in straight direction
+			## calculate eye outer position within the face oval
 			lpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[4][0], image_points[4][1]), False)
 			rpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[5][0], image_points[5][1]), False)
 			
+			leye = False
+			if lpoint_inside_oval == 1:
+				leye = True
+			reye = False
+			if rpoint_inside_oval == 1:
+				reye = True
+			
+			
 			# nose vector 2d representation
-			p1, p2, rotation_vector = noseVector(faceXY, image_points, frame.shape)
-			#cv.line(annotated_image, p1, p2, (38, 128, 15), 2)
+			p1, p2, rotation_angles = noseVector(faceXY, faceXYZ, nose_2d, nose_3d, frame.shape)
 			cv.line(annotated_image, p1, p2, (238, 255, 0), 3)
 
 			noseDirAng = calculate_spatial_angles(p1, p2)
@@ -566,7 +558,9 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 			
 			
 			# get scenery markers
-			facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below)
+			thresholdx = 10
+			thresholdy = 25
+			facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(leye, reye, rotation_angles, thresholdx, thresholdy, rmark, lmark, aspect_ratio_indicator, is_below)
 			
 			# describe the scenery by text
 			scene = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
@@ -581,13 +575,12 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 			
 			face_count += 1
 			faceXY = None
-			image_points = None
 			
 			# for display purpose collect results
 			key = 'f'+str(face_count)
-			result_dict[key] = {'FacedirH': str(facedir_horiz), 'FacedirV': str(facedir_vert), 'Drowsy': str(drowsy), 'Distracted': str(distracted), 
-						'RotMatrix': str(np.round(rotation_vector, 2)), 'Tilt': str(np.round(tilt, 2)), 
-						'NoseVec': str(np.round(noseDirAng, 2))}
+#			result_dict[key] = {'FacedirH': str(facedir_horiz), 'FacedirV': str(facedir_vert), 'Drowsy': str(drowsy), 'Distracted': str(distracted), 
+#						'RotMatrix': str(np.round(rotation_vector, 2)), 'Tilt': str(np.round(tilt, 2)), 
+#						'NoseVec': str(np.round(noseDirAng, 2))}
 			 
 		
 		left_placeholder.image(annotated_image, use_column_width=True)
