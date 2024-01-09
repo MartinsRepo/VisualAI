@@ -64,6 +64,9 @@ ear = [0, 0]
 drowsy_threshold = 150  # Adjust as needed
 distracted_threshold = 15  # Adjust as needed
 
+# Dictionary for optional debug.txt output - please reconfigure to your needs
+debug2text = {"p1":[],"p2":[], "NoseVec Angle":[],"Rotation Vector":[],"LeftEye in Oval":[],"RightEye in Oval":[],"Tilt":[] } 
+
 
 # Helper functions
 def x_element(elem):
@@ -91,6 +94,14 @@ def convert(NormalizedLandmark):
 	res_dict["Y"]=ypoints
 
 	return res_dict
+
+
+def debugWrite(imgname,debug2text): 
+	with open('debug.txt', 'a') as f:
+		f.write("\n\n")
+		f.write(imgname + "\n")
+		for key, value in debug2text.items():
+			f.write(key+": "+value+"\n")
 
 
 # Returns angle in radians
@@ -505,7 +516,7 @@ def image_resize(image, width=None, height=None, inter=cv.INTER_AREA):
     return resized
     
 
-def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_placeholder):
+def decode_image_mediapipe(frame, imgfilename, results, face_count, left_placeholder, right_placeholder, debug_mode):
 	dist=[]
 	scenery = [None] * 10 # max 10 faces
 	
@@ -578,6 +589,12 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 			else:
 				cv.putText(annotated_image,str(face_count+1), (int(fmark[2]*iw), int(fmark[3]*ih)), cv.FONT_HERSHEY_PLAIN, 2, (255,108,0),3)
 
+			if debug_mode == 'On':
+				debug2text = {'p1': str(p1), 'p2': str(p2), 'NoseVec Angle': str(np.round(noseDirAng, 2)), 'Rotation Vector': str(rotation_vector), 'LeftEye in Ova': str(lpoint_inside_oval), 
+							'RightEye in Oval': str(lpoint_inside_oval), 'Tilt': str(np.round(tilt, 2))}
+				
+				debugWrite(imgfilename, debug2text)	
+			
 			
 			face_count += 1
 			faceXY = None
@@ -603,9 +620,10 @@ def decode_image_mediapipe(frame, results, face_count, left_placeholder, right_p
 		for i in range(face_count):
 			right_placeholder.text_area("Detected Scenery", value=scenery[i], height=100)
 		
-		for k in result_dict.keys():
-			if result_dict[k]['FacedirH'] :
-				right_placeholder.text_area("Debug Window:", value=str(k)+': '+str(result_dict[k]), height=50, key=str(random.random()))
+		if debug_mode == 'On':
+			for k in result_dict.keys():
+				if result_dict[k]['FacedirH'] :
+					right_placeholder.text_area("Debug Window:", value=str(k)+': '+str(result_dict[k]), height=50, key=str(random.random()))
 		
 		# cleanup
 		st.cache_data.clear()
@@ -619,7 +637,7 @@ def background_task():
 	threading.Timer(1, background_task).start()
 
 
-def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_confidence):
+def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_confidence, debug_mode):
 	global stframe, sttext, disp
 
 	result_dict = {"FacedirH":[],"FacedirV":[],"Drowsy":[],"Distracted":[],"RotMatrix":[],"Tilt":[],"NoseVec":[] };
@@ -743,11 +761,12 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 					sttext.markdown("Scenery:\n\n"+out)
 					
 					out = ''
-					for k in result_dict.keys():
-						if bool(result_dict.get(k)):
-							if result_dict[k]['FacedirH'] :
-								out = out+str(k)+': '+str(result_dict[k]) + '\n\n'
-					stdebug.markdown("Debug Window:\n\n"+out)
+					if debug_mode == 'On':
+						for k in result_dict.keys():
+							if bool(result_dict.get(k)):
+								if result_dict[k]['FacedirH'] :
+									out = out+str(k)+': '+str(result_dict[k]) + '\n\n'
+						stdebug.markdown("Debug Window:\n\n"+out)
 					disp = False
 				
 					

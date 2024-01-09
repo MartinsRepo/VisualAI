@@ -1,5 +1,6 @@
 import cv2
 import os
+import io
 import streamlit as st
 import mediapipe as mp
 import cv2 as cv
@@ -39,6 +40,14 @@ st.markdown(
 
 ## Create Sidebar
 st.sidebar.title('Selection')
+
+# Add Debug Mode selection
+debug_mode = st.sidebar.radio(
+    "Select Debug Mode",
+    ('Off', 'On')
+)
+
+
 st.sidebar.subheader('Parameter')
 
 def main():
@@ -125,7 +134,7 @@ def main():
 		
 		if img_file_buffer is not None:
 			image = np.array(Image.open(img_file_buffer))
-
+			uploaded_file = io.TextIOWrapper(img_file_buffer) # retrieve uploaded filename
 		else:
 			demo_image = DEMO_IMAGE
 			image = np.array(Image.open(demo_image))
@@ -146,8 +155,13 @@ def main():
 
 			results = face_mesh.process(image)
 			out_image=image.copy()
+			
+			if img_file_buffer is None:
+				imgfilename = "demo.jpg"
+			else:
+				imgfilename = uploaded_file.name
 
-			analysis.decode_image_mediapipe( out_image, results, face_count, left_placeholder, right_placeholder)
+			analysis.decode_image_mediapipe( out_image, imgfilename, results, face_count, left_placeholder, right_placeholder, debug_mode)
 		
 	# Video Page
 	elif app_mode == 'Video':
@@ -213,7 +227,7 @@ def main():
 		fps = 0
 		i = 0
 		
-		analysis.decode_video_mediapipe(video, max_faces, detection_confidence, tracking_confidence)
+		analysis.decode_video_mediapipe(video, max_faces, detection_confidence, tracking_confidence, debug_mode)
 
 		try:
 			os.remove('output.mp4')
