@@ -116,6 +116,25 @@ def calculate_spatial_angles(p1, p2):
 	return azimuth_degrees, azimuth_radians
 
 
+def calculate_euler_angles_from_rotation_matrix(R):
+	"""
+	Calculate Euler angles (yaw, pitch, and roll) from a given rotation matrix.
+	Assumes a ZYX rotation order.
+
+	:param R: A 3x3 rotation matrix.
+	:return: A tuple of Euler angles (yaw, pitch, roll) in radians.
+	"""
+	# Ensure R is a numpy array
+	R = np.array(R)
+
+	# Calculating Euler angles
+	pitch = np.arcsin(-R[2, 0])  # Pitch (θ)
+	yaw = np.arctan2(R[1, 0], R[0, 0])  # Yaw (ψ)
+	roll = np.arctan2(R[2, 1], R[2, 2])  # Roll (φ)
+
+	return yaw, pitch, roll
+
+
 # Eyes Extrctor function,
 def eyesExtractor(right_eye_coords, left_eye_coords):
 	
@@ -296,17 +315,6 @@ def noseVector(faceXY, image_points, size):
 	
 	height, width = size[:2]
 	p1 = p2 = None
-	distance=[]
-	
-	#calculating nose direction vector
-	maxXY = max(faceXY, key=x_element)[0], max(faceXY, key=y_element)[1]
-	minXY = min(faceXY, key=x_element)[0], min(faceXY, key=y_element)[1]
-	
-	xcenter = int(image_points[0][0])
-	ycenter = int(image_points[0][1])
-	
-	distance.append((0, (int(((xcenter-width/2)**2+(ycenter-height/2)**2)**.4)), maxXY[0], minXY[0]))
-	
 	
 	dist_coeffs = np.zeros((4, 1))  # Assuming no lens distortion
 	focal_length = size[1]
@@ -319,13 +327,29 @@ def noseVector(faceXY, image_points, size):
 	
 	(success, rotation_vector, translation_vector) = cv.solvePnP(face3Dmodel, image_points,  camera_matrix, dist_coeffs)
 	
-	(nose_end_point2D, jacobian) = cv.projectPoints(np.array([(0.0, 0.0, 1000.0)]), rotation_vector, translation_vector, camera_matrix, dist_coeffs)
+	(nose_end_point2D, _) = cv.projectPoints(np.array([(0.0, 0.0, 1000.0)]), rotation_vector, translation_vector, camera_matrix, dist_coeffs)
 		
 	# draw vector head position
 	p1 = (int(image_points[0][0]), int(image_points[0][1]))
 	p2 = (int(nose_end_point2D[0][0][0]), int(nose_end_point2D[0][0][1]))
 	
-	return p1, p2, rotation_vector 
+	# Get rotational matrix
+	rotation_axis = rotation_vector / np.linalg.norm(rotation_vector)
+	rotationmatrix = cv.Rodrigues(rotation_vector)[0] * rotation_axis
+	
+	# Get angles
+	#Yaw (ψ) is the rotation about the Z-axis,
+	#Pitch (θ) is the rotation about the Y-axis, and
+	#Roll (φ) is the rotation about the X-axis.
+	yaw, pitch, roll = calculate_euler_angles_from_rotation_matrix(rotationmatrix)
+
+	print("Yaw (ψ):", yaw)
+	print("Pitch (θ):", pitch)
+	print("Roll (φ):", roll)
+
+	rotangles = (yaw,pitch, roll)
+	
+	return p1, p2, rotation_vector, rotangles 
 
 
 def scenery_handdetection(height, width, hand_landmarks):
@@ -559,7 +583,7 @@ def decode_image_mediapipe(frame, imgfilename, results, face_count, left_placeho
 			rpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[5][0], image_points[5][1]), False)
 			
 			# nose vector 2d representation
-			p1, p2, rotation_vector = noseVector(faceXY, image_points, frame.shape)
+			p1, p2, rotation_vector, rotangles = noseVector(faceXY, image_points, frame.shape)
 			#cv.line(annotated_image, p1, p2, (38, 128, 15), 2)
 			cv.line(annotated_image, p1, p2, (238, 255, 0), 3)
 
@@ -705,7 +729,7 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 					rpoint_inside_oval = cv.pointPolygonTest(pts, (image_points[5][0], image_points[5][1]), False)
 					
 					# nose vector 2d representation
-					p1, p2, rotation_vector = noseVector(faceXY, image_points, frame.shape)
+					p1, p2, rotation_vector, rotangles = noseVector(faceXY, image_points, frame.shape)
 					cv.line(frame, p1, p2, (238, 255, 0), 4)
 
 					noseDirAng = calculate_spatial_angles(p1, p2)
