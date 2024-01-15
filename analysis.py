@@ -1,6 +1,7 @@
 import mediapipe as mp
 import streamlit as st
 import numpy as np
+import torch
 import cv2 as cv
 import math
 from PIL import Image
@@ -9,6 +10,7 @@ import base64
 import gc
 import random
 import threading
+from facenet_pytorch import MTCNN
 
 
 stframe = st.empty()
@@ -57,6 +59,15 @@ face3Dmodel = np.array([
     (150.0, -150.0, -125.0)     # Right mouth corner
     ], dtype=np.float64)
 
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+mtcnn = MTCNN(image_size=160,
+              margin=0,
+              min_face_size=20,
+              thresholds=[0.6, 0.7, 0.7], # MTCNN thresholds
+              factor=0.709,
+              post_process=True,
+              device=device # If you don't have GPU
+        )
 
 ear = [0, 0]
 
@@ -94,6 +105,17 @@ def convert(NormalizedLandmark):
 	res_dict["Y"]=ypoints
 
 	return res_dict
+
+
+# Landmarks: [Left Eye], [Right eye], [nose], [left mouth], [right mouth]
+def npAngle(a, b, c):
+	ba = a - b
+	bc = c - b 
+
+	cosine_angle = np.dot(ba, bc)/(np.linalg.norm(ba)*np.linalg.norm(bc))
+	angle = np.arccos(cosine_angle)
+
+	return np.degrees(angle)
 
 
 def debugWrite(imgname,debug2text): 
@@ -311,6 +333,51 @@ def faceProfileExtractor(source, landmarks):
 	return rmark, lmark, tilt, faceoval_coords, asr_ind
 
 
+def predFacePose(frame):
+	bbox_, prob_, landmarks_ = mtcnn.detect(frame, landmarks=True) # The detection part producing bounding box, probability of the detected face, and the facial landmarks
+	angle_R_List = []
+	angle_L_List = []
+	predLabelList = []
+	boxes = []
+	
+	def checkEye(landmarks):
+		angR = npAngle(landmarks[0], landmarks[1], landmarks[2]) # Calculate the right eye angle
+		angL = npAngle(landmarks[1], landmarks[0], landmarks[2])# Calculate the left eye angle
+		
+		angle_R_List.append(angR)
+		angle_L_List.append(angL)
+
+		if ((int(angR) in range(35, 57)) and (int(angL) in range(35, 58))):
+		#if ((int(angR) in range(40, 62)) and (int(angL) in range(32, 59))):
+			predLabel='Frontal'
+			predLabelList.append(predLabel)
+		else: 
+			if angR < angL:
+				predLabel='RightProfile'
+			else:
+				predLabel='LeftProfile'
+		
+		return predLabel
+	
+	try:
+		for bbox, landmarks, prob in zip(bbox_, landmarks_, prob_):
+			print(type(bbox),type(landmarks),type(prob))
+			if bbox is not None: # To check if we detect a face in the image
+				boxes.append(bbox)
+				if prob > 0.8: # To check if the detected face has probability more than 80%, to avoid 
+					predLabel = checkEye(landmarks)
+				else:
+					predLabel='NotDetectable'
+			else:
+				predLabel='NotFace'
+			
+			predLabelList.append(predLabel)
+	except: 
+		pass
+		
+	return boxes, predLabelList
+
+
 def noseVector(faceXY, image_points, size):
 	
 	height, width = size[:2]
@@ -339,15 +406,14 @@ def noseVector(faceXY, image_points, size):
 	
 	# Get angles
 	#Yaw (ψ) is the rotation about the Z-axis,
-	#Pitch (θ) is the rotation about the Y-axis, and
-	#Roll (φ) is the rotation about the X-axis.
-	yaw, pitch, roll = calculate_euler_angles_from_rotation_matrix(rotationmatrix)
+	#Pitch (θ) is the rotation about the Y-axis
+	yaw, pitch, _ = calculate_euler_angles_from_rotation_matrix(rotationmatrix)
 
-	print("Yaw (ψ):", yaw)
-	print("Pitch (θ):", pitch)
-	print("Roll (φ):", roll)
+	#print("Yaw (ψ):", yaw)
+	#print("Pitch (θ):", pitch)
+	#print("Roll (φ):", roll)
 
-	rotangles = (yaw,pitch, roll)
+	rotangles = (yaw,pitch)
 	
 	return p1, p2, rotation_vector, rotangles 
 
@@ -369,7 +435,7 @@ def scenery_handdetection(height, width, hand_landmarks):
 	return str_hands, is_below
 
 
-def create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below):
+def create_scenerymarker(LabelList, lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below):
 	
 	lme=False	# left mouth endpoint
 	rme=False	# right mouth endpoint
@@ -377,22 +443,21 @@ def create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_in
 	# head position
 	if lpoint_inside_oval >= 0:
 		lme = True
-	else:
-	   	lme = False
-	rme = True
 	if rpoint_inside_oval >= 0:
 		rme = True
-	else:
-		rme = False
-		
-	# face position left-straight-right
+	
+	print(LabelList,rme,lme)
 	facedir_horiz = 99
-	if lme and rme:
-		facedir_horiz = 0  # straight
-	elif lme and not rme:
-		facedir_horiz = -1 # left
-	elif not lme and rme:
-		facedir_horiz = 1  # right
+	if LabelList == "Frontal" or (lme and rme) :
+		print('1')
+		facedir_horiz = 0  	# straight
+	elif LabelList == "LeftProfile" or (lme and not rme):
+		print('2')
+		facedir_horiz = -1  	# left
+	elif LabelList == "RightProfile"or (not lme and rme):
+		print('3')
+		facedir_horiz = 1  	# right
+	
 	
 	# face position up-straight-down
 	facedir_vert = 99
@@ -538,11 +603,12 @@ def image_resize(image, width=None, height=None, inter=cv.INTER_AREA):
     resized = cv.resize(image,dim,interpolation=inter)
 
     return resized
-    
+
+#def SortpredLabelList()    
 
 def decode_image_mediapipe(frame, imgfilename, results, face_count, left_placeholder, right_placeholder, debug_mode):
-	dist=[]
 	scenery = [None] * 10 # max 10 faces
+	LabelList = []
 	
 	drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
 	
@@ -552,17 +618,38 @@ def decode_image_mediapipe(frame, imgfilename, results, face_count, left_placeho
 		annotated_image = image_resize(frame, width=313, height=438)
 		ih, iw, _ = annotated_image.shape
 		
+		boxes, predLabelList = predFacePose(annotated_image)
+		blen = len(boxes)
+		
 		for face_landmarks in results.multi_face_landmarks:
 			faceXY = []
 			image_points = np.empty((0, 2), int)
 			f_arr, ip_arr = getImagePoints(face_landmarks, iw, ih)
-
+			
 			faceXY.append(f_arr)		
 			image_points = np.append(image_points, ip_arr, axis=0)
 			
 			for i in image_points:
 				cv.circle(annotated_image,(int(i[0]),int(i[1])),2,(255,0,0),-1)
+			
+			# Make faceprediction List
+			def solve(bl, tr, p) :
+				if (p[0] > bl[0] and p[0] < tr[0] and p[1] > bl[1] and p[1] < tr[1]) :
+					return True
+				else :
+					return False
+			
+			i=0
+			for i in range(blen):
+				bottom_left = (boxes[i][0],boxes[i][1])
+				top_right = (boxes[i][2],boxes[i][3])
+				nosepoint = (ip_arr[0][0], ip_arr[0][1])
 				
+				if solve(bottom_left, top_right, nosepoint):
+					break
+
+			LabelList = predLabelList[i]
+							
 			# Eye and face oval extraction
 			rmark, lmark, tilt, faceoval_coords, aspect_ratio_indicator = faceProfileExtractor('image', face_landmarks)
 			
@@ -584,7 +671,6 @@ def decode_image_mediapipe(frame, imgfilename, results, face_count, left_placeho
 			
 			# nose vector 2d representation
 			p1, p2, rotation_vector, rotangles = noseVector(faceXY, image_points, frame.shape)
-			#cv.line(annotated_image, p1, p2, (38, 128, 15), 2)
 			cv.line(annotated_image, p1, p2, (238, 255, 0), 3)
 
 			noseDirAng = calculate_spatial_angles(p1, p2)
@@ -601,7 +687,7 @@ def decode_image_mediapipe(frame, imgfilename, results, face_count, left_placeho
 			
 			
 			# get scenery markers
-			facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below)
+			facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(LabelList, lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below)
 			
 			# describe the scenery by text
 			scene = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
@@ -690,6 +776,14 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 			frame.flags.writeable = True
 			
 			ih, iw, _ = frame.shape
+			
+			if ret:
+				boxes, predLabelList = predFacePose(frame)
+				blen = len(boxes)
+			else:
+				boxes = predLabelList = None
+				blen = 0
+			
 			face_count = 0
 			
 			if results.multi_face_landmarks:
@@ -707,6 +801,27 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 					
 					for i in image_points:
 						cv.circle(frame,(int(i[0]),int(i[1])),3,(255,0,0),-1)
+						
+					# Make faceprediction List
+					def solve(bl, tr, p) :
+						if (p[0] > bl[0] and p[0] < tr[0] and p[1] > bl[1] and p[1] < tr[1]) :
+							return True
+						else :
+							return False
+					
+					i=0
+					if blen>0:
+						for i in range(blen):
+							bottom_left = (boxes[i][0],boxes[i][1])
+							top_right = (boxes[i][2],boxes[i][3])
+							nosepoint = (ip_arr[0][0], ip_arr[0][1])
+							
+							if solve(bottom_left, top_right, nosepoint):
+								break
+
+						LabelList = predLabelList[i]
+					else:
+						LabelList = "No frame"
 						
 					# Eye and face oval extraction
 					rmark, lmark, tilt, faceoval_coords, aspect_ratio_indicator = faceProfileExtractor('image', face_landmarks)
@@ -745,7 +860,7 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 						str_hands, is_below = scenery_handdetection(ih, iw, hand_landmarks)
 				
 					# get scenery markers
-					facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below)
+					facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(LabelList, lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below)
 					
 					# describe the scenery by text
 					scene = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
