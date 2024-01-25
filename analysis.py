@@ -75,9 +75,8 @@ ear = [0, 0]
 drowsy_threshold = 150  # Adjust as needed
 distracted_threshold = 15  # Adjust as needed
 
-# Dictionary for optional debug.txt output - please reconfigure to your needs
-debug2text = {"p1":[],"p2":[], "NoseVec Angle":[],"Rotation Vector":[],"LeftEye in Oval":[],"RightEye in Oval":[],"Tilt":[] } 
-
+# Dictionary for optional debug.txt output - please reconfigure to your needs 
+debug2text = {"yaw":[],"pitch":[], "roll":[], "nose":[], "tilt":[], "out":[] } 
 
 # Helper functions
 def x_element(elem):
@@ -267,7 +266,7 @@ def extractCoordsFromDict(faceoval_coords,iw,ih):
 	return result
 	
 
-# get canonical face matrix and central image points
+# get 2d canonical face matrix and central image points
 def getImagePoints(landmarks, iw, ih):
 	faceXY = []
 	
@@ -290,8 +289,11 @@ def getImagePoints(landmarks, iw, ih):
 		faceXY[57],     # "left mouth"
 		faceXY[287]     # "right mouth"
 	], dtype="double")
-
-	return faceXY, image_points
+	
+	# remember nose position
+	nose_2d = faceXY[19]
+	
+	return faceXY, image_points, nose_2d
 	
 	
 def getAspectRatio(right_eye_landmarks, left_eye_landmarks):
@@ -346,8 +348,8 @@ def predFacePose(frame):
 		
 		angle_R_List.append(angR)
 		angle_L_List.append(angL)
-
-		if ((int(angR) in range(35, 57)) and (int(angL) in range(35, 58))):
+		
+		if ((int(angR) in range(30, 65)) and (int(angL) in range(30, 65))):
 		#if ((int(angR) in range(40, 62)) and (int(angL) in range(32, 59))):
 			predLabel='Frontal'
 			predLabelList.append(predLabel)
@@ -361,7 +363,6 @@ def predFacePose(frame):
 	
 	try:
 		for bbox, landmarks, prob in zip(bbox_, landmarks_, prob_):
-			print(type(bbox),type(landmarks),type(prob))
 			if bbox is not None: # To check if we detect a face in the image
 				boxes.append(bbox)
 				if prob > 0.8: # To check if the detected face has probability more than 80%, to avoid 
@@ -401,19 +402,23 @@ def noseVector(faceXY, image_points, size):
 	p2 = (int(nose_end_point2D[0][0][0]), int(nose_end_point2D[0][0][1]))
 	
 	# Get rotational matrix
-	rotation_axis = rotation_vector / np.linalg.norm(rotation_vector)
-	rotationmatrix = cv.Rodrigues(rotation_vector)[0] * rotation_axis
+	#rotation_axis = rotation_vector / np.linalg.norm(rotation_vector)
+	rotationmatrix = cv.Rodrigues(rotation_vector)[0] # * rotation_axis
 	
 	# Get angles
 	#Yaw (ψ) is the rotation about the Z-axis,
 	#Pitch (θ) is the rotation about the Y-axis
-	yaw, pitch, _ = calculate_euler_angles_from_rotation_matrix(rotationmatrix)
+	angles,mtxR,mtxQ,Qx,Qy,Qz = cv.RQDecomp3x3(rotationmatrix)
+	yaw = angles[0]
+	pitch = angles[1]
+	roll= angles[2]
 
+	# uncomment for debugging
 	#print("Yaw (ψ):", yaw)
 	#print("Pitch (θ):", pitch)
 	#print("Roll (φ):", roll)
 
-	rotangles = (yaw,pitch)
+	rotangles = (yaw,pitch,roll)
 	
 	return p1, p2, rotation_vector, rotangles 
 
@@ -435,7 +440,7 @@ def scenery_handdetection(height, width, hand_landmarks):
 	return str_hands, is_below
 
 
-def create_scenerymarker(LabelList, lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below):
+def create_scenerymarker(LabelList, lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotangles, noseDirAng, rmark, lmark, tilt, is_below):
 	
 	lme=False	# left mouth endpoint
 	rme=False	# right mouth endpoint
@@ -446,65 +451,75 @@ def create_scenerymarker(LabelList, lpoint_inside_oval, rpoint_inside_oval, aspe
 	if rpoint_inside_oval >= 0:
 		rme = True
 	
-	print(LabelList,rme,lme)
+	### face position left - straight - right
 	facedir_horiz = 99
-	if LabelList == "Frontal" or (lme and rme) :
-		print('1')
-		facedir_horiz = 0  	# straight
-	elif LabelList == "LeftProfile" or (lme and not rme):
-		print('2')
-		facedir_horiz = -1  	# left
-	elif LabelList == "RightProfile"or (not lme and rme):
-		print('3')
-		facedir_horiz = 1  	# right
+	if lme and rme:  # always frontal, override LabelList
+		if is_between(-90, noseDirAng[0], -40):
+			facedir_horiz = 1 			# right
+		elif  is_between(40, noseDirAng[0], 90):
+			facedir_horiz = -1			# left
+		else:
+			facedir_horiz = 0  			# straight
 	
+	elif LabelList == "LeftProfile" or (lme and not rme):
+		facedir_horiz = -1  				# left
+	elif LabelList == "RightProfile"or (not lme and rme):
+		facedir_horiz = 1  				# right
 	
 	# face position up-straight-down
 	facedir_vert = 99
 	
 	# detect vertical position
 	if facedir_horiz == 0:
-		#print( noseDirAng[0], rotation_vector[0], rotation_vector[1])
-		if is_between(-45, noseDirAng[0], 45) and is_between(-3.5, rotation_vector[0], -2) and is_between(-0.25, rotation_vector[1], 0.25):
-			facedir_vert = 0
-		elif is_between(-10, noseDirAng[0], 10) and  is_between(-2.49, rotation_vector[0], 0):
-			facedir_vert= -1
-		elif is_between(-180, noseDirAng[0], -160) and is_between(-0.6, rotation_vector[1], 0):
-			facedir_vert = 1
+		if rotangles[0]<0: # negativ Yaw for straight/down
+			if is_between(0, abs(rotangles[1]), 10):	# Yaw range
+				facedir_vert = 0		# forward
+			if abs(rotangles[1]) > 10:
+				facedir_vert= -1		# down
+		else:
+			if is_between(0, abs(rotangles[1]), 25): 	# Yaw range
+				facedir_vert = 1		# up
+			else:
+				facedir_vert= -1		# down
 
-	elif facedir_horiz == -1:
-		if is_between(60, noseDirAng[0], 170) :
-			if is_between(-0.6, rotation_vector[0], 0.6):
+	elif facedir_horiz == -1: #profileleft
+		if rotangles[0]<0: 					# negativ Yaw for straight/down
+				facedir_vert = -1 		#up	
+		else :
+			if is_between(110, abs(noseDirAng[0]), 180) :		
+				facedir_vert = 1 		#up	
+			elif abs(noseDirAng[0])<110:
 				facedir_vert = 0
-			elif rotation_vector[0]<0.6 or rotation_vector[0]>0.6 and tilt>=2:
-				facedir_vert = 1	
-		elif is_between(0, noseDirAng[0], 59) and tilt < -2:
-			facedir_vert = -1	
-	elif facedir_horiz == 1:
-		if is_between(-170, noseDirAng[0], -60) :
-			if noseDirAng[0] >- 120 and is_between(-2.5, tilt, 2.5):
-				facedir_vert = 0
-			elif is_between(-0.8, rotation_vector[0], -0.2):
-					facedir_vert = 1
-		elif is_between(-59, noseDirAng[0], 0) and tilt>3:
-			facedir_vert = -1
-	
+	elif facedir_horiz == 1: #profileright
+		if rotangles[0]<0: 					# negativ Yaw for straight
+			if is_between(10, abs(rotangles[1]), 90):
+				facedir_vert = 0		# forward
+			elif abs(rotangles[1]) < 10:
+				facedir_vert = -1		# down
+		else:
+			if is_between(0, abs(rotangles[1]), 45):
+				facedir_vert = -1 		#down
+			else:
+				facedir_vert = 1 		#up
+			
 	# Calculate eye vertikal distances
 	rdelta = rmark[3] - rmark[2]
 	ldelta = lmark[3] - lmark[2]
 	drowsy = False
 	distracted = False
+	awake = False
 	
 	if facedir_vert == -1 and is_below:
 		distracted = True
 	elif rdelta < 0.03 and ldelta < 0.03 and aspect_ratio_indicator:
 		drowsy = True
+	else:
+		awake = True
 	
-	
-	return facedir_horiz, facedir_vert, drowsy, distracted
+	return facedir_horiz, facedir_vert, awake, drowsy, distracted
 
 
-def scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert):
+def scenery_description(awake, drowsy, distracted, str_hands,  facedir_horiz, facedir_vert):
 	scenery = ''
 	if drowsy:
 		if facedir_horiz==0:
@@ -545,7 +560,7 @@ def scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_v
 		elif facedir_horiz==1:
 			scenery = "Person distracted, face turned into right direction, looking downward. "+str_hands
 	
-	else:
+	elif awake:
 		if facedir_horiz==0:
 			if facedir_vert == 0:
 				scenery = "Person awake, face turned into straight direction, looking forward. "+str_hands
@@ -575,6 +590,8 @@ def scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_v
 				scenery = "Person awake, face turned into right direction, vertical pose not detectable. "+str_hands
 		elif facedir_horiz==99:
 			scenery = "Person awake and direction not detectable. "+str_hands
+	else:
+		scenery = "Person state not dectable. "
 	
 	return scenery
 
@@ -620,11 +637,14 @@ def decode_image_mediapipe(frame, imgfilename, results, face_count, left_placeho
 		
 		boxes, predLabelList = predFacePose(annotated_image)
 		blen = len(boxes)
+	
+		#draw rectangle, uncomment for debugging
+		#cv.rectangle(annotated_image,(int(boxes[0][0]),int(boxes[0][1])),(int(boxes[0][2]),int(boxes[0][3])),(255,0,0),2)
 		
 		for face_landmarks in results.multi_face_landmarks:
 			faceXY = []
 			image_points = np.empty((0, 2), int)
-			f_arr, ip_arr = getImagePoints(face_landmarks, iw, ih)
+			f_arr, ip_arr, _ = getImagePoints(face_landmarks, iw, ih)
 			
 			faceXY.append(f_arr)		
 			image_points = np.append(image_points, ip_arr, axis=0)
@@ -678,19 +698,40 @@ def decode_image_mediapipe(frame, imgfilename, results, face_count, left_placeho
 			# calculate and draw hand positions
 			hand_landmarks = detect_hands(hands, annotated_image)
 			
-			str_hands =''
 			is_below = None
+			str_hands =''
 			if hand_landmarks is not None:
+				
 				for hand_landmark in hand_landmarks:
-					mp_drawing.draw_landmarks(annotated_image, hand_landmark, mp_hands.HAND_CONNECTIONS)
+					# Calculate the bounding box for the hands
+					x_max = 0
+					y_max = 0
+					x_min = iw
+					y_min = ih
+					#mp_drawing.draw_landmarks(annotated_image, hand_landmark, mp_hands.HAND_CONNECTIONS)
+					for lm in hand_landmark.landmark:
+						x, y = int(lm.x * iw), int(lm.y * ih)
+						if x > x_max:
+							x_max = x
+						if y > y_max:
+							y_max = y
+						if x < x_min:
+							x_min = x
+						if y < y_min:
+							y_min = y
+					
+					# Draw the bounding box		
+					cv.rectangle(annotated_image, (x_min, y_min), (x_max, y_max), (0, 255, 0), 1)
+					#print(x_min, y_min,x_max, y_max)
+
 				str_hands, is_below = scenery_handdetection(ih, iw, hand_landmarks)
-			
-			
+				
 			# get scenery markers
-			facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(LabelList, lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below)
+			awake = drowsy = distracted = False
+			facedir_horiz, facedir_vert, awake, drowsy, distracted = create_scenerymarker(LabelList, lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotangles, noseDirAng, rmark, lmark, tilt, is_below)
 			
 			# describe the scenery by text
-			scene = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
+			scene = scenery_description(awake, drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
 			scenery[face_count] = ('Face '+ str(face_count+1) + ': ' + scene)
 			
 			# writing face number to image
@@ -700,8 +741,7 @@ def decode_image_mediapipe(frame, imgfilename, results, face_count, left_placeho
 				cv.putText(annotated_image,str(face_count+1), (int(fmark[2]*iw), int(fmark[3]*ih)), cv.FONT_HERSHEY_PLAIN, 2, (255,108,0),3)
 
 			if debug_mode == 'On':
-				debug2text = {'p1': str(p1), 'p2': str(p2), 'NoseVec Angle': str(np.round(noseDirAng, 2)), 'Rotation Vector': str(rotation_vector), 'LeftEye in Ova': str(lpoint_inside_oval), 
-							'RightEye in Oval': str(lpoint_inside_oval), 'Tilt': str(np.round(tilt, 2))}
+				debug2text = {'yaw': str(rotangles[0]), 'pitch': str(rotangles[1]), 'roll': str(rotangles[2]), 'nose':str(noseDirAng),'tilt':str(tilt),'out':scenery[face_count]}
 				
 				debugWrite(imgfilename, debug2text)	
 			
@@ -794,7 +834,7 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 					
 					faceXY = []
 					image_points = np.empty((0, 2), int)
-					f_arr, ip_arr = getImagePoints(face_landmarks, iw, ih)
+					f_arr, ip_arr, _ = getImagePoints(face_landmarks, iw, ih)
 
 					faceXY.append(f_arr)		
 					image_points = np.append(image_points, ip_arr, axis=0)
@@ -851,19 +891,53 @@ def decode_video_mediapipe(video, max_faces, detection_confidence, tracking_conf
 
 					# calculate and draw hand positions
 					hand_landmarks = detect_hands(hands, frame)
-
-					str_hands =''
+					
 					is_below = None
+					str_hands =''
 					if hand_landmarks is not None:
+						
 						for hand_landmark in hand_landmarks:
-							mp_drawing.draw_landmarks(frame, hand_landmark, mp_hands.HAND_CONNECTIONS)
+							# Calculate the bounding box for the hands
+							x_max = 0
+							y_max = 0
+							x_min = iw
+							y_min = ih
+							#mp_drawing.draw_landmarks(annotated_image, hand_landmark, mp_hands.HAND_CONNECTIONS)
+							for lm in hand_landmark.landmark:
+								x, y = int(lm.x * iw), int(lm.y * ih)
+								if x > x_max:
+									x_max = x
+								if y > y_max:
+									y_max = y
+								if x < x_min:
+									x_min = x
+								if y < y_min:
+									y_min = y
+							
+							# Draw the bounding box		
+							cv.rectangle(annotated_image, (x_min, y_min), (x_max, y_max), (0, 255, 0), 1)
+							#print(x_min, y_min,x_max, y_max)
+
 						str_hands, is_below = scenery_handdetection(ih, iw, hand_landmarks)
+
+					#str_hands =''
+					#is_below = None
+					#if hand_landmarks is not None:
+					#	for hand_landmark in hand_landmarks:
+					#		mp_drawing.draw_landmarks(frame, hand_landmark, mp_hands.HAND_CONNECTIONS)
+					#	str_hands, is_below = scenery_handdetection(ih, iw, hand_landmarks)
 				
 					# get scenery markers
-					facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(LabelList, lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below)
+					awake = drowsy = distracted = False
+					facedir_horiz, facedir_vert, awake, drowsy, distracted = create_scenerymarker(LabelList, lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotangles, noseDirAng, rmark, lmark, tilt, is_below)
+			
+					# describe the scenery by text
+					scene = scenery_description(awake, drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
+					
+					#facedir_horiz, facedir_vert, drowsy, distracted = create_scenerymarker(LabelList, lpoint_inside_oval, rpoint_inside_oval, aspect_ratio_indicator, rotation_vector, noseDirAng, rmark, lmark, tilt, is_below)
 					
 					# describe the scenery by text
-					scene = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
+					#scene = scenery_description(drowsy, distracted, str_hands,  facedir_horiz, facedir_vert)
 					
 					scenery.append('Face ' +  str(face_count+1) + ': ' + scene+'\n')
 					
