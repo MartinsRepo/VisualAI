@@ -5,7 +5,7 @@ import streamlit as st
 import mediapipe as mp
 import cv2 as cv
 import numpy as np
-import tempfile
+#import tempfile
 import time
 from PIL import Image
 
@@ -49,6 +49,23 @@ debug_mode = st.sidebar.radio(
 
 
 st.sidebar.subheader('Parameter')
+
+
+def getRawImage(imgname):
+	def getPath(root_folder, filename):
+		for dirpath, dirnames, files in os.walk(root_folder):
+			if filename in files:
+				return os.path.join(dirpath, filename)
+		return None
+	
+	path = getPath('./images/drvmonpics', str(imgname))
+	
+	if not None:
+		imgraw = mp.Image.create_from_file(path)
+		return imgraw
+	else:
+		return None
+
 
 def main():
 	## Define available pages in selection box
@@ -135,9 +152,12 @@ def main():
 		if img_file_buffer is not None:
 			image = np.array(Image.open(img_file_buffer))
 			uploaded_file = io.TextIOWrapper(img_file_buffer) # retrieve uploaded filename
+			img_raw = getRawImage(str(uploaded_file.name))
 		else:
 			demo_image = DEMO_IMAGE
 			image = np.array(Image.open(demo_image))
+			img_raw = mp.Image.create_from_file(DEMO_IMAGE)
+			#img_raw = getRawImage(demo_image)
 
 		st.sidebar.text('Original Image')
 		st.sidebar.image(image)
@@ -161,7 +181,7 @@ def main():
 			else:
 				imgfilename = uploaded_file.name
 
-			analysis.decode_image_mediapipe( out_image, imgfilename, results, face_count, left_placeholder, right_placeholder, debug_mode)
+			analysis.decode_image_mediapipe(img_raw, out_image, imgfilename, results, face_count, left_placeholder, right_placeholder, debug_mode)
 		
 	# Video Page
 	elif app_mode == 'Video':

@@ -623,10 +623,10 @@ def image_resize(image, width=None, height=None, inter=cv.INTER_AREA):
 
 #def SortpredLabelList()    
 
-def decode_image_mediapipe(frame, imgfilename, results, face_count, left_placeholder, right_placeholder, debug_mode):
+def decode_image_mediapipe(img_raw, frame, imgfilename, results, face_count, left_placeholder, right_placeholder, debug_mode):
 	scenery = [None] * 10 # max 10 faces
 	LabelList = []
-	
+
 	drawing_spec = mp.solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=1)
 	
 	if results.multi_face_landmarks:
