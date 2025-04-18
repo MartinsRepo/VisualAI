@@ -160,3 +160,4 @@ cython_debug/
 #.idea/
 output.mp4
 debug.txt
+.qodo
